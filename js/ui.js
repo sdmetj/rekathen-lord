@@ -145,8 +145,8 @@ function showTabs(on) { tabEl().classList.toggle('is-hidden', !on); }
 function bldPos(id) {
   /* [x, baseline y] — 낮은 y가 멀리, 높은 y가 앞줄 */
   return {
-    keep: [200, 128], wall: [200, 210], market: [92, 150], chapel: [318, 142],
-    workshop: [330, 106], tavern: [80, 190], greenhouse: [84, 106], forge: [316, 188], manor: [200, 178],
+    keep: [200, 128], wall: [200, 204], market: [92, 150], chapel: [318, 142],
+    workshop: [330, 106], tavern: [80, 182], greenhouse: [84, 106], forge: [316, 180], manor: [200, 170],
   }[id];
 }
 function drawBld(id, lv, s) {
