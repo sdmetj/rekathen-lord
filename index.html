@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0d0e13">
+<title>레카텐 변경 영주 — 30일의 겨울</title>
+<meta name="description" content="《외뿔의 악마》 세계관, 마왕 도래 이전. 신성 타이셀 왕국 북부의 작은 변경령을 30일 동안 다스리는 인터랙티브 텍스트 RPG.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="hud" class="hud hidden">
+    <div class="hud-top">
+      <div class="fief">
+        <span class="fief-label">ARDEN MARCH</span>
+        <strong class="fief-name">아르덴 변경령</strong>
+      </div>
+      <div class="daybox">
+        <span class="day-num" id="dayNum">1</span>
+        <span class="day-total">/ 30일</span>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <main id="screen"></main>
+
+  <nav id="tabs" class="tabs hidden">
+    <button class="tab active" data-tab="estate"><span>◆</span>영지</button>
+    <button class="tab" data-tab="market"><span>◇</span>상회</button>
+    <button class="tab" data-tab="people"><span>♡</span>인물</button>
+    <button class="tab" data-tab="journal"><span>✎</span>기록</button>
+  </nav>
+</div>
+
+<div id="overlay" class="overlay hidden"></div>
+<div id="toast" class="toast"></div>
+
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
