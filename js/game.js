@@ -31,6 +31,12 @@ function priceOf(id, day) {
 }
 const buyPrice = id => Math.round(priceOf(id, state.day) * 1.28);
 
+function josa(word, withBatchim, without) {
+  const c = word.charCodeAt(word.length - 1) - 0xAC00;
+  const has = c >= 0 && c < 11172 && c % 28 !== 0;
+  return has ? withBatchim : without;
+}
+
 function toast(msg) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
@@ -628,7 +634,7 @@ function startBattle(choice, ev) {
     boss: b.boss, loot: b.loot, log: [], over: false, guard: false,
     source: { res: choice.res || '', title: ev.title, choice: choice.t },
   };
-  state.battle.log.push(`<div>⚔ ${b.name}이(가) 덤벼든다.</div>`);
+  state.battle.log.push(`<div>⚔ ${b.name}${josa(b.name, '이', '가')} 덤벼든다.</div>`);
   save(); render();
 }
 
@@ -638,16 +644,15 @@ function renderBattle() {
     <div class="card" style="padding:14px 14px 16px">
       <div class="battle">
         <div class="enemy" id="enemyBox">
+          <span class="scene-tag">ENCOUNTER</span>
           <img src="assets/${b.art}.png" alt="">
-          <div class="hpbar">
-            <div class="lab"><span>${b.name}</span><span>${Math.max(0, b.hp)} / ${b.maxHp}</span></div>
-            <div class="bar hp"><span style="width:${Math.max(0, b.hp / b.maxHp * 100)}%"></span></div>
-          </div>
         </div>
-        <div>
-          <div class="lab" style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-bottom:4px">
-            <span>영주</span><span>${Math.max(0, state.hp)} / ${state.maxHp}</span>
-          </div>
+        <div class="hprow">
+          <div class="lab"><span>${b.name}</span><span>${Math.max(0, b.hp)} / ${b.maxHp}</span></div>
+          <div class="bar hp"><span style="width:${Math.max(0, b.hp / b.maxHp * 100)}%"></span></div>
+        </div>
+        <div class="hprow">
+          <div class="lab"><span>영주</span><span>${Math.max(0, state.hp)} / ${state.maxHp}</span></div>
           <div class="bar self"><span style="width:${Math.max(0, state.hp / state.maxHp * 100)}%"></span></div>
         </div>
         <div class="log" id="logBox">${b.log.join('')}</div>
@@ -714,7 +719,7 @@ function battleWin() {
     loot.gold ? `금화 +${loot.gold}` : '',
     ...Object.entries(loot.items || {}).map(([k, v]) => `${ITEMS[k].name} +${v}`),
   ].filter(Boolean).join(' · ');
-  b.log.push(`<div class="win">◆ ${b.name}을(를) 쓰러뜨렸다.${lootTxt ? ` ${lootTxt}` : ''}</div>`);
+  b.log.push(`<div class="win">◆ ${b.name}${josa(b.name, '을', '를')} 쓰러뜨렸다.${lootTxt ? ` ${lootTxt}` : ''}</div>`);
   save(); renderBattle();
 }
 
