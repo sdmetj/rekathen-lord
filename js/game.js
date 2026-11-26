@@ -168,13 +168,13 @@ function renderEstate() {
     const guards = [];
     let locked = false;
     if (c.req) for (const [k, v] of Object.entries(c.req)) {
-      const have = k === 'gold' ? state.gold : (state.inv[k] || 0);
+      const have = haveOf(k);
       if (have < v) locked = true;
       guards.push(`<span class="tag ${have < v ? 'bad' : ''}">${labelOf(k)} ${won(v)}</span>`);
     }
     if (c.cost) for (const [k, v] of Object.entries(c.cost)) {
       if (v > 0) {
-        const have = k === 'gold' ? state.gold : (state.inv[k] || 0);
+        const have = haveOf(k);
         if (have < v) locked = true;
         guards.push(`<span class="tag ${have < v ? 'bad' : 'gold'}">${labelOf(k)} −${won(v)}</span>`);
       }
@@ -194,6 +194,11 @@ function renderEstate() {
     </div>
     <div class="choices">${choices}</div>
   </div>`;
+}
+
+function haveOf(k) {
+  if (['gold', 'troops', 'morale', 'faith', 'hp'].includes(k)) return state[k];
+  return state.inv[k] || 0;
 }
 
 function labelOf(k) {
@@ -401,7 +406,7 @@ function renderMarket() {
     const cls = p > prev ? 'up' : p < prev ? 'down' : '';
     return `<div class="row">
       <div class="ico">${it.icon}</div>
-      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 시세 ${prev} → ${p}</small></div>
+      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 어제 ${prev} → 오늘 ${p}</small></div>
       <div class="price ${cls}">${p} G</div>
       <button class="mini" data-act="buy" data-id="${id}" ${state.gold < buyPrice(id) ? 'disabled' : ''}>매입 ${buyPrice(id)}</button>
     </div>`;
@@ -413,7 +418,7 @@ function renderMarket() {
     const cls = p > prev ? 'up' : p < prev ? 'down' : '';
     return `<div class="row">
       <div class="ico">${it.icon}</div>
-      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 시세 ${prev} → ${p}</small></div>
+      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 어제 ${prev} → 오늘 ${p}</small></div>
       <div class="price ${cls}">${p} G</div>
       <button class="mini sell" data-act="sell" data-id="${id}" ${(state.inv[id] || 0) <= 0 ? 'disabled' : ''}>판매</button>
     </div>`;
