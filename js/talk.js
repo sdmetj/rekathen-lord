@@ -192,8 +192,9 @@ function jealousyFor(state, excludeId) {
   const wives = Object.keys(state.rel).filter(id => state.rel[id] === 'wife' || state.rel[id] === 'lover');
   const lovers = wives.filter(id => id !== excludeId);
   if (!lovers.length) return null;
-  const target = lovers[(state.day + state.turn) % lovers.length];
+  const target = lovers[(state.day + state.phase) % lovers.length];
+  if (!target) return null;
   const arr = JEALOUSY_LINES[target];
   if (!arr) return null;
-  return { id: target, line: arr[(state.day + state.turn) % arr.length] };
+  return { id: target, line: arr[(state.day + state.phase) % arr.length] };
 }
