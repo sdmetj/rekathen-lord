@@ -59,19 +59,24 @@ function tintImage(src, tint, w, h) {
   });
 }
 
+/* base는 핵심 인물의 도트 이름일 수도, 다른 변경 인물의 id일 수도 있다.
+   체인 끝까지 따라가 실제 도트(sprite)를 가진 인물을 찾아낸다. */
+function spriteBaseOf(c) {
+  let cur = c, guard = 0;
+  while (cur && !cur.sprite && cur.base && guard++ < 10) cur = CHARS[cur.base];
+  return (cur && cur.sprite) ? cur.sprite : null;
+}
+const IMG_FALLBACK = "onerror=\"this.onerror=null;this.src='assets/lord.png'\"";
 function faceSrc(id) {
   const c = CHARS[id];
-  if (!c) return '';
+  if (!c) return 'assets/lord.png';
   if (c.core) return `assets/${c.sprite}_portrait.png`;
   if (FaceCache[id]) return FaceCache[id];
-  const base = CHARS[c.base];
-  const src = base ? `assets/${base.sprite}_portrait.png` : 'assets/lord.png';
-  FaceCache[id] = src;
-  const load = `assets/${CHARS[c.base].sprite}_portrait.png`;
-  const im = new Image();
-  im.onload = () => tintImage(load, c.tint, 200, 200).then(url => { FaceCache[id] = url; });
-  im.src = load;
-  return src;
+  const sb = spriteBaseOf(c);
+  const load = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
+  FaceCache[id] = load;
+  tintImage(load, c.tint || [0, 1, 0], 200, 200).then(url => { FaceCache[id] = url; });
+  return load;
 }
 function spriteSrc(id) {
   const c = CHARS[id];
@@ -79,10 +84,10 @@ function spriteSrc(id) {
   if (c.core) return `assets/${c.sprite}.png`;
   const key = '_sp_' + id;
   if (FaceCache[key]) return FaceCache[key];
-  const base = CHARS[c.base];
-  const load = `assets/${base.sprite}.png`;
+  const sb = spriteBaseOf(c);
+  const load = sb ? `assets/${sb}.png` : 'assets/lord.png';
   FaceCache[key] = load;
-  tintImage(load, c.tint, 176, 240).then(url => { FaceCache[key] = url; });
+  tintImage(load, c.tint || [0, 1, 0], 176, 240).then(url => { FaceCache[key] = url; });
   return load;
 }
 function bodyArt(id) { return 'assets/wolf.png'; }
@@ -263,7 +268,7 @@ function renderMap() {
         return `<button class="place-btn" data-place="${p.id}">
           <i class="pi">${p.icon}</i>
           <span class="pt"><b>${p.name}</b><span>${ppl.length ? ppl.slice(0, 2).map(id => CHARS[id].name).join(', ') + (ppl.length > 2 ? ` 외 ${ppl.length - 2}명` : '') : p.sub}</span>
-          ${ppl.length ? `<span class="faces">${ppl.slice(0, 3).map(id => `<img class="px" src="${faceSrc(id)}">`).join('')}</span>` : ''}
+          ${ppl.length ? `<span class="faces">${ppl.slice(0, 3).map(id => `<img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK}>`).join('')}</span>` : ''}
           </span>
           ${ppl.length ? `<span class="crowd">${ppl.length}</span>` : ''}
         </button>`;
@@ -389,7 +394,7 @@ function renderPlace() {
     ${ppl.length ? `<div class="people">${ppl.map(id => {
       const c = CHARS[id];
       return `<button class="person" data-person="${id}">
-        <img class="px" src="${faceSrc(id)}" alt="">
+        <img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK} alt="">
         <span class="pb"><b>${c.name}</b><span>${placeSubLabel(id)}</span></span>
         <span class="ps">${c.romance || s.rel[id] ? heartsHTML(s.aff[id] || 0) : `<span class="tag">${TRAITS[c.trait] ? TRAITS[c.trait].name : ''}</span>`}</span>
       </button>`;
@@ -429,7 +434,7 @@ function openChat(id) {
   el.innerHTML = `
     <div class="chat-stage">
       <div class="bg" style="background-image:url('assets/${PLACES.find(p => p.id === (c.place || 'castle')).bg}.png')"></div>
-      <img id="chatSprite" class="chat-sprite px" src="${spriteSrc(id)}" alt="">
+      <img id="chatSprite" class="chat-sprite px" src="${spriteSrc(id)}" ${IMG_FALLBACK} alt="">
       <div class="chat-top">
         <button class="chat-back" id="chatBack">←</button>
         <span class="phase-pill">${c.romance ? '로맨스 가능' : '교류'}</span>
@@ -1130,7 +1135,7 @@ function renderRoster() {
         const c = CHARS[id];
         const rel = s.rel[id];
         return `<button class="char-card" data-c="${id}">
-          <img class="px" src="${faceSrc(id)}" alt="">
+          <img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK} alt="">
           <div class="cb">
             <div class="cn"><b>${c.name}</b>${rel ? `<span class="rel ${rel}">${REL_LABEL[rel] || rel}</span>` : ''}${c.romance && !rel ? '<span class="rel">로맨스</span>' : ''}</div>
             <p>${c.role}</p>
@@ -1290,10 +1295,16 @@ function warmFaces() {
     const c = CHARS[id];
     if (c.core) return;
     faceSrc(id);
-    const base = `assets/${CHARS[c.base].sprite}_portrait.png`;
+    const sb = spriteBaseOf(c);
+    const base = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
     const im = new Image();
     pending++;
-    im.onload = () => tintImage(base, c.tint, 200, 200).then(url => { FaceCache[id] = url; if (++done === pending && G.state) render(); });
+    const finish = () => tintImage(base, c.tint || [0, 1, 0], 200, 200).then(url => {
+      FaceCache[id] = url;
+      if (++done === pending && G.state) render();
+    });
+    im.onload = finish;
+    im.onerror = finish;   /* 한 명 로드가 실패해도 나머지 렌더가 막히지 않게 */
     im.src = base;
   });
 }
