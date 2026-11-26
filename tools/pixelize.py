@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Turn a flat-magenta-background anime render into a true pixel-art sprite.
+"""Turn flat-magenta anime renders into true pixel-art game assets.
 
-Pipeline
-  1. background removal: border flood-fill on the corner colour, plus magenta-halo
-     cleanup for the pink pixels that survive in thin gaps between hair strands
-  2. silhouette repair (interior holes filled) and colour fill behind transparent
-     areas, so area-reduction never bleeds dark pixels into the edges
-  3. reduction to a real pixel grid (176x240), hard alpha cut
-  4. 28-colour palette (MEDIANCUT, dither NONE) built from opaque pixels only
-  5. 1px dark outline, integer NEAREST upscale x4 for crisp pixelated display
+Modes
+  sprite    full-body character  -> transparent 176x240, 32 colours, 1px outline, x4
+  portrait  bust portrait        -> transparent 200x200, 32 colours, no outline, x3
+  scene     background painting  -> opaque 400x225, 48 colours, x2
+  all       everything found in assets/raw
+
+Pipeline (sprite / portrait)
+  1. background removal: border flood-fill from the corner colour + magenta halo cleanup
+  2. silhouette repair (enclosed holes filled) and colour bleed filling behind alpha
+  3. downscale to the real pixel grid, hard alpha cut
+  4. 32-colour palette (MEDIANCUT, dither NONE) built from opaque pixels only
+  5. optional 1px outline, integer NEAREST upscale
 """
+import argparse
 import sys
 from collections import deque
 from pathlib import Path
@@ -17,11 +22,50 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
-TARGET_W, TARGET_H = 176, 240
-SCALE = 4
-PALETTE = 28
 BG_TOL = 80
 MAGENTA_TOL = 45
+
+SPRITES = [
+    ("lord", "lord.png"),
+    ("serena", "serena.png"),
+    ("mira", "mira.png"),
+    ("claire", "claire.png"),
+    ("seraphine", "seraphine.png"),
+    ("kael", "kael.png"),
+    ("ellen", "ellen.png"),
+    ("lana", "lana.png"),
+    ("mill", "mill.png"),
+    ("rebe", "rebe.png"),
+    ("beloa", "beloa.png"),
+    ("taron", "taron.png"),
+    ("sgarteron", "sgarteron.png"),
+    ("dorun", "dorun.png"),
+    ("wolf", "wolf.png"),
+]
+PORTRAITS = [
+    ("serena_face", "serena_portrait.png"),
+    ("mira_face", "mira_portrait.png"),
+    ("claire_face", "claire_portrait.png"),
+    ("seraphine_face", "seraphine_portrait.png"),
+    ("kael_face", "kael_portrait.png"),
+    ("ellen_face", "ellen_portrait.png"),
+    ("lana_face", "lana_portrait.png"),
+    ("mill_face", "mill_portrait.png"),
+    ("rebe_face", "rebe_portrait.png"),
+    ("beloa_face", "beloa_portrait.png"),
+    ("taron_face", "taron_portrait.png"),
+    ("sgarteron_face", "sgarteron_portrait.png"),
+    ("dorun_face", "dorun_portrait.png"),
+    ("lord_face", "lord_portrait.png"),
+]
+SCENES = [
+    ("bg_castle", "bg_castle.png"),
+    ("bg_shop", "bg_shop.png"),
+    ("bg_chapel", "bg_chapel.png"),
+    ("bg_workshop", "bg_workshop.png"),
+    ("bg_tavern", "bg_tavern.png"),
+    ("bg_forest", "bg_forest.png"),
+]
 
 
 def bg_colour(arr):
@@ -54,11 +98,6 @@ def border_flood(candidate):
 
 
 def neutralise(img, mask, iters=60):
-    """Grow clean colour into magenta-tainted pixels (`mask`) from their neighbours.
-
-    Used for the pink halo that survives inside thin hair gaps: the pixel stays part of
-    the character, it just needs the hair colour from next to it.
-    """
     out = img.astype(np.float32)
     todo = mask.copy()
     for _ in range(iters):
@@ -78,11 +117,12 @@ def neutralise(img, mask, iters=60):
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def quantise(rgba, colors=PALETTE, method=Image.Quantize.MEDIANCUT):
-    """Nearest-colour mapping to a palette built from opaque pixels only."""
+def quantise(rgba, colors=32, method=Image.Quantize.MEDIANCUT):
     arr = np.array(rgba)
     mask = arr[:, :, 3] > 0
     pixels = arr[mask][:, :3]
+    if len(pixels) == 0:
+        return rgba
     strip = Image.fromarray(pixels.reshape(1, -1, 3), "RGB")
     q = strip.quantize(colors=colors, method=method, dither=Image.Dither.NONE)
     pal = np.array(q.getpalette()[:colors * 3], dtype=np.int32).reshape(-1, 3)
@@ -98,7 +138,44 @@ def quantise(rgba, colors=PALETTE, method=Image.Quantize.MEDIANCUT):
     return Image.fromarray(res, "RGBA")
 
 
-def add_outline(img, colour=(22, 18, 28)):
+def defringe(img, iters=8):
+    """Kill stray magenta speckles that survived quantisation inside hair/armour."""
+    arr = np.array(img).astype(np.int16)
+    rgb, alpha = arr[:, :, :3], arr[:, :, 3]
+    r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    bad = (alpha > 0) & (r > 115) & (b > 95) & (b - g > 42) & (r - g > 42)
+    for _ in range(iters):
+        if not bad.any():
+            break
+        acc = np.zeros_like(rgb, dtype=np.int32)
+        cnt = np.zeros(rgb.shape[:2], dtype=np.int32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nbr = np.roll(np.roll(rgb, dy, axis=0), dx, axis=1)
+            ok = np.roll(np.roll((alpha > 0) & ~bad, dy, axis=0), dx, axis=1)
+            acc += nbr * ok[..., None]
+            cnt += ok
+        upd = bad & (cnt > 0)
+        rgb[upd] = acc[upd] // cnt[upd][:, None]
+        bad &= ~upd
+    out = np.dstack([np.clip(rgb, 0, 255), alpha]).astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
+def clean_specks(img, iters=2):
+    """Drop isolated opaque dust left on the alpha edge, then refill the 1px holes."""
+    arr = np.array(img)
+    alpha = arr[:, :, 3] > 0
+    for _ in range(iters):
+        cnt = np.zeros(alpha.shape, dtype=np.int32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            cnt += np.roll(np.roll(alpha, dy, axis=0), dx, axis=1).astype(np.int32)
+        dust = alpha & (cnt <= 1)
+        alpha &= ~dust
+    arr[:, :, 3] = (alpha * 255).astype(np.uint8)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
+def add_outline(img, colour=(24, 20, 34)):
     a = np.array(img)
     opaque = a[:, :, 3] > 0
     edge = np.zeros_like(opaque)
@@ -108,11 +185,11 @@ def add_outline(img, colour=(22, 18, 28)):
     edge[0, :] = edge[-1, :] = False
     edge[:, 0] = edge[:, -1] = False
     out = a.copy()
-    out[edge] = [colour[0], colour[1], colour[2], 230]
+    out[edge] = [colour[0], colour[1], colour[2], 235]
     return Image.fromarray(out, "RGBA")
 
 
-def process(src, dst, target=(TARGET_W, TARGET_H), outline=True, grade=True, align="bottom"):
+def cutout(src):
     arr = np.array(Image.open(src).convert("RGB"))
     bg = bg_colour(arr)
     rgb16 = arr.astype(np.int16)
@@ -120,22 +197,24 @@ def process(src, dst, target=(TARGET_W, TARGET_H), outline=True, grade=True, ali
     dist_bg = np.sqrt(((rgb16 - bg) ** 2).sum(axis=2))
 
     opaque = ~border_flood((dist_bg < BG_TOL) | (magenta > 90))
-    opaque &= ~(magenta > MAGENTA_TOL)          # drop pink halo pixels
-    interior = ~border_flood(~opaque) & ~opaque  # enclosed holes -> solid
+    opaque &= ~(magenta > MAGENTA_TOL)
+    interior = ~border_flood(~opaque) & ~opaque
     opaque |= interior
 
     base = neutralise(arr, (magenta >= 25) & opaque)
     blur = np.array(Image.fromarray(base).filter(ImageFilter.GaussianBlur(5)))
-    base[~opaque] = blur[~opaque]                # no dark bleed at reduction
+    base[~opaque] = blur[~opaque]
+    return Image.fromarray(base, "RGB"), Image.fromarray((opaque * 255).astype(np.uint8), "L")
 
-    img = Image.fromarray(base, "RGB")
-    alpha = Image.fromarray((opaque * 255).astype(np.uint8), "L")
+
+def process_sprite(src, dst, target=(176, 240), outline=True, align="bottom", colors=32, scale=4,
+                   color=1.14, contrast=1.06, top_bias=0.0):
+    img, alpha = cutout(src)
     bbox = alpha.getbbox()
     if bbox:
         img, alpha = img.crop(bbox), alpha.crop(bbox)
-    if grade:
-        img = ImageEnhance.Color(img).enhance(1.12)
-        img = ImageEnhance.Contrast(img).enhance(1.06)
+    img = ImageEnhance.Color(img).enhance(color)
+    img = ImageEnhance.Contrast(img).enhance(contrast)
 
     w, h = img.size
     tw, th = target
@@ -155,40 +234,73 @@ def process(src, dst, target=(TARGET_W, TARGET_H), outline=True, grade=True, ali
 
     rgba = canvas_rgb.convert("RGBA")
     rgba.putalpha(canvas_a)
-    img_out = quantise(rgba)
+    out = defringe(clean_specks(quantise(rgba, colors=colors)))
     if outline:
-        img_out = add_outline(img_out)
-    img_out.resize((tw * SCALE, th * SCALE), Image.NEAREST).save(dst)
-    return dst, img_out
+        out = add_outline(out)
+    out.resize((tw * scale, th * scale), Image.NEAREST).save(dst)
+    return out
+
+
+def process_scene(src, dst, target=(400, 225), colors=48, scale=2):
+    img = Image.open(src).convert("RGB")
+    img = ImageEnhance.Color(img).enhance(1.08)
+    small = img.resize(target, Image.LANCZOS)
+    out = quantise(small.convert("RGBA"), colors=colors).convert("RGB")
+    out.resize((target[0] * scale, target[1] * scale), Image.NEAREST).save(dst)
+    return out
 
 
 def main():
-    pairs = [
-        ("assets/raw_lord.png", "assets/lord.png"),
-        ("assets/raw_serena3.png", "assets/serena.png"),
-        ("assets/raw_mira2.png", "assets/mira.png"),
-        ("assets/raw_wolf.png", "assets/wolf.png"),
-    ]
-    portraits = [
-        ("assets/raw_serena_face.png", "assets/serena_portrait.png"),
-        ("assets/raw_mira_face.png", "assets/mira_portrait.png"),
-    ]
-    base = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-    smalls = []
-    for s, d in pairs:
-        out, small = process(base / s, base / d)
-        smalls.append(small)
-        print(f"{out}  {Image.open(out).size}")
-    for s, d in portraits:
-        out, _ = process(base / s, base / d, target=(240, 240), align="center")
-        print(f"{out}  {Image.open(out).size}")
-    sheet = Image.new("RGBA", ((TARGET_W * 3 + 24) * len(smalls), TARGET_H * 3),
-                      (18, 19, 26, 255))
-    for i, small in enumerate(smalls):
-        sheet.alpha_composite(small.resize((TARGET_W * 3, TARGET_H * 3), Image.NEAREST),
-                              (i * (TARGET_W * 3 + 24), 0))
-    sheet.save(base / "assets/_sheet.png")
-    print("sheet", base / "assets/_sheet.png")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("mode", nargs="?", default="all", choices=["all", "sprites", "portraits", "scenes"])
+    ap.add_argument("root", nargs="?", default=".")
+    ap.add_argument("--only", default="")
+    args = ap.parse_args()
+    base = Path(args.root)
+    raw = base / "assets" / "raw"
+    out = base / "assets"
+    only = set(filter(None, args.only.split(",")))
+    made = []
+
+    if args.mode in ("all", "sprites"):
+        for name, dst in SPRITES:
+            if only and name not in only:
+                continue
+            src = raw / f"{name}.png"
+            if not src.exists():
+                print("skip", src)
+                continue
+            small = process_sprite(src, out / dst)
+            made.append((dst, small))
+            print(f"assets/{dst}  {Image.open(out / dst).size}")
+    if args.mode in ("all", "portraits"):
+        for name, dst in PORTRAITS:
+            if only and name not in only:
+                continue
+            src = raw / f"{name}.png"
+            if not src.exists():
+                print("skip", src)
+                continue
+            process_sprite(src, out / dst, target=(240, 240), outline=False, align="center", scale=3,
+                           colors=48, color=1.26, contrast=1.14)
+            print(f"assets/{dst}  {Image.open(out / dst).size}")
+    if args.mode in ("all", "scenes"):
+        for name, dst in SCENES:
+            if only and name not in only:
+                continue
+            src = raw / f"{name}.png"
+            if not src.exists():
+                print("skip", src)
+                continue
+            process_scene(src, out / dst)
+            print(f"assets/{dst}  {Image.open(out / dst).size}")
+    if made:
+        w = 176 * 2
+        sheet = Image.new("RGBA", ((w + 16) * len(made), 480), (20, 22, 32, 255))
+        for i, (_, small) in enumerate(made):
+            sheet.alpha_composite(small.resize((w, 480), Image.NEAREST), (i * (w + 16), 0))
+        sheet.save(out / "_sheet.png")
+        print("sheet assets/_sheet.png")
 
 
 if __name__ == "__main__":

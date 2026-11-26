@@ -1,811 +1,477 @@
-/* ─────────────────────────────────────────────────────────────
-   레카텐 변경 영주 — 엔진
-   ───────────────────────────────────────────────────────────── */
-(() => {
-'use strict';
+/* ══════════════════════════════════════════════════════════════
+   게임 상태 · 로직 — 샌드박스 영주 시뮬레이션
+   ══════════════════════════════════════════════════════════════ */
 
-const SAVE_KEY = 'rekathen-lord.save.v1';
-const MAX_DAY = 30;
-const $ = (s, r = document) => r.querySelector(s);
-const screenEl = $('#screen');
-const hudEl = $('#hud');
-const tabsEl = $('#tabs');
-const overlayEl = $('#overlay');
-const toastEl = $('#toast');
+const SAVE_KEY = 'arden_save_v2';
 
-let state = null;
+const G = {
+  state: null,
+  screen: { view: 'title' },
+  turn: 0,
+};
 
-/* ── 유틸 ─────────────────────────────── */
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const won = n => n.toLocaleString('ko-KR');
-
-function hash(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return h >>> 0;
-}
-function priceOf(id, day) {
-  const f = 0.72 + ((hash(id + '#' + day) % 1000) / 1000) * 0.68;
-  return Math.max(1, Math.round(ITEMS[id].base * f));
-}
-const buyPrice = id => Math.round(priceOf(id, state.day) * 1.28);
-
-function josa(word, withBatchim, without) {
-  const c = word.charCodeAt(word.length - 1) - 0xAC00;
-  const has = c >= 0 && c < 11172 && c % 28 !== 0;
-  return has ? withBatchim : without;
-}
-
-function toast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => toastEl.classList.remove('show'), 1700);
-}
-
-/* ── 상태 ─────────────────────────────── */
-function newState() {
+function defaultState(name) {
   return {
-    v: 1, day: 1, gold: 130, troops: 36, morale: 52, faith: 48,
-    hp: 60, maxHp: 60, atk: 8,
-    inv: { herb: 2, iron: 1, pelt: 0, mana: 0, potion: 1, sword: 0, cloak: 0, lamp: 0 },
-    aff: { serena: 0, mira: 0 },
-    talked: { serena: false, mira: false },
-    gifted: { serena: false, mira: false },
-    flags: {}, seen: {}, journal: [],
-    pending: null, battle: null, lastResult: null,
-    ended: false, ending: null, tab: 'estate', startedAt: Date.now(),
+    v: 2, name: name || '아르덴 영주',
+    day: 1, season: 3, dayOfSeason: 1, year: 1, phase: 0,
+    ap: 4, apUsed: 0, sleptEarly: false,
+    hp: 100, maxHp: 100,
+    gold: 120, troops: 8, morale: 50, faith: 30,
+    rep: { warm: 0, bold: 0, cunning: 0, mercy: 0, loyal: 0, cold: 0 },
+    aff: {}, trust: {}, mood: {}, rel: {}, lastTalk: {}, lastGift: {},
+    items: { herb: 5, iron: 2, pelt: 1, cloth: 3, potion: 2 },
+    equip: { weapon: null, armor: null },
+    bld: { keep: 1, wall: 0, market: 1, chapel: 1, workshop: 1, tavern: 0, greenhouse: 0, forge: 0, manor: 0 },
+    quests: [], questSeq: 1,
+    prices: {}, flags: {}, memories: {},
+    children: [], wedding: {}, pregnant: null,
+    logs: [], rumors: 0, milestones: [],
+    place: 'castle', visited: {}, battledToday: false,
+    gameOver: false, startDay: 1,
   };
 }
-function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
-function load() {
+
+/* ── 저장 / 불러오기 ──────────────────────────────────────── */
+function saveGame() {
+  if (!G.state) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.state)); } catch (e) {}
+}
+function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    if (!s || s.v !== 1) return null;
+    if (!s || s.v !== 2) return null;
     return s;
   } catch (e) { return null; }
 }
-function wipe() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function clearSave() { localStorage.removeItem(SAVE_KEY); }
 
-/* ── HUD ─────────────────────────────── */
-const STATS = [
-  { key: 'gold',   label: '재정',       icon: '◈', max: 400, fmt: v => won(v) },
-  { key: 'troops', label: '병력',       icon: '⚔', max: 80,  fmt: v => v },
-  { key: 'morale', label: '민심',       icon: '♨', max: 100, fmt: v => v },
-  { key: 'faith',  label: '교단 신뢰',  icon: '✝', max: 100, fmt: v => v },
-];
+/* ── 유틸 ─────────────────────────────────────────────────── */
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function ri(a, b) { return Math.floor(rnd(a, b + 1)); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function today() { return G.state.day + '-' + G.state.phase; }
 
-function renderHUD(changed = []) {
-  $('#dayNum').textContent = state.day;
-  const box = $('#stats');
-  box.innerHTML = STATS.map(s => {
-    const v = state[s.key];
-    const pct = clamp((v / s.max) * 100, 0, 100);
-    const danger = (s.key !== 'gold' && v <= 20) || (s.key === 'gold' && v <= 20);
-    const cls = changed.includes(s.key) ? ' stat bump' : '';
-    return `<div class="stat${danger ? ' danger' : ''}${cls}">
-      <div class="stat-label"><i>${s.icon}</i>${s.label}</div>
-      <div class="stat-val">${s.fmt(v)}</div>
-      <div class="stat-bar"><span style="width:${pct}%"></span></div>
-    </div>`;
-  }).join('');
-  requestAnimationFrame(() => {
-    box.querySelectorAll('.bump').forEach(el => el.classList.remove('bump'));
-  });
+function addLog(text) {
+  const s = G.state;
+  s.logs.unshift({ d: s.day, t: text });
+  if (s.logs.length > 120) s.logs.length = 120;
 }
 
-function flashStats(changed) {
-  if (!changed.length) return;
-  const box = $('#stats');
-  STATS.forEach((s, i) => {
-    if (!changed.includes(s.key)) return;
-    const el = box.children[i];
-    if (!el) return;
-    el.classList.add('up');
-    setTimeout(() => el.classList.remove('up'), 760);
-  });
+function toast(text, kind) {
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = text;
+  root.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = '.4s'; }, 1900);
+  setTimeout(() => el.remove(), 2400);
 }
 
-/* ── 화면 라우팅 ─────────────────────── */
-function render() {
-  if (!state) return renderTitle();
-  hudEl.classList.remove('hidden');
-  renderHUD();
-  if (state.ended) { tabsEl.classList.add('hidden'); return renderEnding(); }
-  tabsEl.classList.remove('hidden');
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
-  if (state.battle) return renderBattle();
-  if (state.tab === 'market') return renderMarket();
-  if (state.tab === 'people') return renderPeople();
-  if (state.tab === 'journal') return renderJournal();
-  return renderEstate();
+/* ── 성향 태그 ────────────────────────────────────────────── */
+const REP_LABEL = { warm: '다정함', bold: '호탕', cunning: '교활', mercy: '자비', loyal: '충의', cold: '냉혈' };
+function repTags(s) {
+  const entries = Object.entries(s.rep).filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
+  return entries.slice(0, 2).map(([k]) => REP_LABEL[k]);
+}
+function repTone(s) {
+  const sum = s.rep.warm + s.rep.mercy - s.rep.cold - s.rep.cunning * 0.5;
+  return sum >= 6 ? '온화' : sum <= -6 ? '차가움' : '중립';
 }
 
-/* ── 타이틀 ───────────────────────────── */
-function renderTitle() {
-  hudEl.classList.add('hidden');
-  tabsEl.classList.add('hidden');
-  const saved = load();
-  screenEl.innerHTML = `
-    <div class="title-wrap">
-      <div class="title-lead">REKATHEN · A MARCH IN WINTER</div>
-      <h1 class="title-main">레카텐 <em>변경 영주</em></h1>
-      <div class="title-sub">서른 날의 겨울, 하나의 작은 영지</div>
-      <div class="title-art"><img src="assets/lord.png" alt="영주"></div>
-      <p class="title-quote">마왕이 오기 전의 이야기.<br>신성 타이셀 왕국의 북쪽 끝,<br>검은숲과 맞닿은 작은 변경령에서<br>당신은 겨울 하나를 견뎌야 한다.</p>
-      ${saved ? `<button class="btn-primary" data-act="continue">이어하기 · Day ${saved.day}</button>` : ''}
-      <button class="btn-ghost" data-act="new">새 게임 시작</button>
-      <div class="title-note">《외뿔의 악마》 세계관 · 비공식 팬 프로토타입<br>수치는 자동 저장됩니다 · 세로 화면 최적화</div>
-    </div>`;
+/* ── 아이템 관리 ──────────────────────────────────────────── */
+function give(dict, delta) {
+  const s = G.state;
+  for (const k in delta) {
+    if (k === 'gold' || k === 'troops' || k === 'morale' || k === 'faith' || k === 'hp') continue;
+    s.items[k] = Math.max(0, (s.items[k] || 0) + delta[k]);
+  }
+}
+function itemCount(id) { return (G.state.items[id] || 0); }
+
+function applyDelta(d) {
+  const s = G.state;
+  if (!d) return;
+  if (d.gold) s.gold += d.gold;
+  if (d.troops) s.troops = Math.max(0, s.troops + d.troops);
+  if (d.morale) s.morale = clamp(s.morale + d.morale, -100, 100);
+  if (d.faith) s.faith = clamp(s.faith + d.faith, 0, 100);
+  if (d.hp) s.hp = clamp(s.hp + d.hp, 0, s.maxHp);
+  const items = {};
+  for (const k in d) if (ITEMS[k]) items[k] = d[k];
+  give(null, items);
+  if (d.aff) for (const id in d.aff) addAff(id, d.aff[id]);
+  if (d.trust) for (const id in d.trust) addTrust(id, d.trust[id]);
+  if (d.rep) for (const k in d.rep) s.rep[k] = (s.rep[k] || 0) + d.rep[k];
+  if (d.unlockShop) s.flags.shopOpen = true;
 }
 
-/* ── 영지(이벤트) ─────────────────────── */
-function renderEstate() {
-  if (!state.pending) pickEvent();
-  const ev = state.pending;
-  const art = ev.art && ev.art !== 'none' ? `<div class="scene ${ev.art === 'wolf' ? 'wolf' : ''}">
-      <span class="scene-tag">DAY ${String(state.day).padStart(2, '0')}</span>
-      <img src="assets/${ev.art}.png" alt="">
-      <span class="scene-line"></span>
-    </div>` : `<div class="scene none"><span class="scene-tag">DAY ${String(state.day).padStart(2, '0')}</span><span class="scene-line"></span></div>`;
+function addAff(id, v) {
+  const s = G.state;
+  if (!CHARS[id]) return;
+  const before = s.aff[id] || 0;
+  s.aff[id] = clamp(before + v, 0, 1000);
+  if (v > 0 && affStage(s.aff[id]) > affStage(before)) SFX.play('heart');
+}
+function addTrust(id, v) {
+  const s = G.state;
+  const key = 'trust_' + id;
+  s.flags[key] = clamp((s.flags[key] || 0) + v, 0, 100);
+}
+function trustOf(id) { return G.state.flags['trust_' + id] || 0; }
 
-  let body;
-  if (state.pending.phase === 'result') {
-    body = `<div class="result">
-      <div class="result-box">${state.pending.resultText || ''}</div>
-      <div class="btn-row">
-        <button class="btn solid" data-act="next-day">다음 날 →</button>
-      </div>
-      <div class="foothint">Day ${state.day} · 남은 ${MAX_DAY - state.day}일</div>
-    </div>`;
-    screenEl.innerHTML = `<div class="card">${art}
-      <div class="card-body">
-        <div class="kicker">${ev.kicker}</div>
-        <h2 class="card-title">${ev.title}</h2>
-      </div>${body}</div>`;
-    return;
+/* ── 상태 파생 ────────────────────────────────────────────── */
+function apMax() { return G.state.bld.keep >= 3 ? 5 : 4; }
+function apLeft() { return G.state.ap; }
+function phaseOf(apUsed) { return Math.min(2, Math.floor(apUsed / 2)); }
+function weather() {
+  const s = G.state;
+  const list = SEASON_WEATHER[(s.season + 3) % 4];
+  return WEATHER[list[(s.day - 1) % list.length]];
+}
+function priceOf(id) {
+  const s = G.state;
+  if (s.prices[id]) return s.prices[id];
+  return ITEMS[id].base;
+}
+function refreshPrices() {
+  const s = G.state;
+  const w = weather();
+  s.prices = {};
+  for (const id in ITEMS) {
+    const base = ITEMS[id].base;
+    const drift = rnd(-0.16, 0.2);
+    const seasonMul = s.season === 3 && (id === 'cloak' || id === 'potion') ? 1.3 : s.season === 0 && id === 'herb' ? 1.2 : 1;
+    s.prices[id] = Math.max(3, Math.round(base * (1 + drift) * w.sell * seasonMul));
+  }
+}
+function sellPrice(id) { return Math.round(priceOf(id) * (1 + (G.state.bld.market - 1) * 0.08)); }
+function buyPrice(id) { return Math.round(priceOf(id) * 1.22); }
+function marketStock() { return 2 + G.state.bld.market * 2; }
+
+/* ── 시설 ─────────────────────────────────────────────────── */
+function bldEffect(id) {
+  const s = G.state;
+  const b = BUILDINGS.find(x => x.id === id);
+  return b.effect[Math.min(s.bld[id], b.max) - 1] || '';
+}
+function canBuild(id) {
+  const s = G.state;
+  const b = BUILDINGS.find(x => x.id === id);
+  const lv = s.bld[id];
+  if (lv >= b.max) return { ok: false, why: '최고 등급' };
+  const cost = b.cost[lv];
+  if (!cost) return { ok: false, why: '?' };
+  if (s.gold < cost.gold) return { ok: false, why: '금화 부족' };
+  for (const k in cost) {
+    if (k === 'gold') continue;
+    if (itemCount(k) < cost[k]) return { ok: false, why: ITEMS[k].name + ' 부족' };
+  }
+  return { ok: true, cost };
+}
+function doBuild(id) {
+  const chk = canBuild(id);
+  if (!chk.ok) return false;
+  const s = G.state;
+  const cost = chk.cost;
+  s.gold -= cost.gold;
+  for (const k in cost) if (k !== 'gold') s.items[k] -= cost[k];
+  s.bld[id]++;
+  SFX.play('build');
+  const b = BUILDINGS.find(x => x.id === id);
+  addLog(`${b.name}이(가) ${s.bld[id]}단계로 올라갔다.`);
+  milestone(`🏗 ${b.name} ${s.bld[id]}단계`, b.effect[Math.min(s.bld[id], b.max) - 1] || '영지가 자랐다.');
+  saveGame();
+  return true;
+}
+
+/* ── 하루 루프 ────────────────────────────────────────────── */
+function spendAP(n = 1) {
+  const s = G.state;
+  s.ap = Math.max(0, s.ap - n);
+  s.apUsed += n;
+  s.phase = phaseOf(s.apUsed);
+}
+
+function dailyIncome() {
+  const s = G.state;
+  let gold = 0, lines = [];
+  const tax = 10 + s.bld.keep * 6 + Math.round(s.morale / 20);
+  gold += tax;
+  lines.push(`세금 +${tax}`);
+  const produce = {
+    greenhouse: { 1: { herb: 2 }, 2: { herb: 4 }, 3: { herb: 7, cloth: 1 } },
+    forge: { 1: { iron: 1 }, 2: { iron: 2 }, 3: { iron: 3 } },
+    wall: { 1: {}, 2: {}, 3: {} },
+    tavern: { 1: {}, 2: {}, 3: {} },
+  };
+  for (const b in produce) {
+    const lv = s.bld[b];
+    if (!lv) continue;
+    const p = produce[b][lv];
+    for (const k in p) { s.items[k] = (s.items[k] || 0) + p[k]; lines.push(`${ITEMS[k].name} +${p[k]}`); }
+  }
+  let upkeep = 4 + Math.floor(s.troops / 4);
+  if (s.bld.keep >= 2) upkeep -= 2;
+  upkeep = Math.max(0, upkeep);
+  gold -= upkeep;
+  lines.push(`유지비 -${upkeep}`);
+  return { gold, lines };
+}
+
+function dailyProduceLines() { return []; }
+
+function endDay(sleepAtNight) {
+  const s = G.state;
+  /* 결산 */
+  const inc = dailyIncome();
+  s.gold += inc.gold;
+  refreshPrices();
+  s.battledToday = false;
+
+  /* 건물 수익 */
+  if (s.bld.market >= 2) {
+    const bonus = [0, 0, 8, 16][s.bld.market] || 0;
+    s.gold += bonus;
+  }
+  if (s.bld.chapel >= 1) s.faith = clamp(s.faith + [0, 1, 2, 4][s.bld.chapel], 0, 100);
+  if (s.bld.tavern >= 1) s.morale = clamp(s.morale + s.bld.tavern, -100, 100);
+
+  /* 아내/첩 내조 버프 */
+  for (const id in s.rel) {
+    const r = s.rel[id];
+    if (r === 'wife') {
+      if (id === 'serena') s.faith = clamp(s.faith + 2, 0, 100);
+      if (id === 'mira') s.gold += 14;
+      if (id === 'claire') { if (s.items.herb) s.items.herb += 2; }
+      if (id === 'seraphine') s.flags.spyNet = true;
+      if (id === 'ellen' || id === 'lana') s.troops += 1;
+      if (id === 'mill') s.morale = clamp(s.morale + 2, -100, 100);
+    } else if (r === 'concubine') {
+      if (id === 'mira') s.gold += 8;
+      if (id === 'seraphine') s.flags.spyNet = true;
+    }
+    /* 애정은 방치하면 조금 식는다 */
+    if (!(id in s.lastTalk) || s.day - (s.lastTalk[id] || 0) > 3) {
+      s.aff[id] = Math.max(0, (s.aff[id] || 0) - 4);
+    }
   }
 
-  const choices = ev.choices.map((c, i) => {
-    if (c.cond && !c.cond(state)) return '';
-    const guards = [];
-    let locked = false;
-    if (c.req) for (const [k, v] of Object.entries(c.req)) {
-      const have = haveOf(k);
-      if (have < v) locked = true;
-      guards.push(`<span class="tag ${have < v ? 'bad' : ''}">${labelOf(k)} ${won(v)}</span>`);
+  /* 임신 → 출산 */
+  if (s.pregnant) {
+    s.pregnant.days++;
+    if (s.pregnant.days >= 20) {
+      birthChild(s.pregnant.mom);
+      s.pregnant = null;
     }
-    if (c.cost) for (const [k, v] of Object.entries(c.cost)) {
-      if (v > 0) {
-        const have = haveOf(k);
-        if (have < v) locked = true;
-        guards.push(`<span class="tag ${have < v ? 'bad' : 'gold'}">${labelOf(k)} −${won(v)}</span>`);
-      }
-    }
-    if (c.battle) guards.push(`<span class="tag bad">전투</span>`);
-    return `<button class="choice${locked ? ' locked' : ''}" data-act="choose" data-i="${i}" ${locked ? 'disabled' : ''}>
-      <span class="ct">${c.t}</span>
-      ${guards.length ? `<span class="meta">${guards.join('')}</span>` : ''}
-    </button>`;
-  }).join('');
+  }
 
-  screenEl.innerHTML = `<div class="card">${art}
-    <div class="card-body">
-      <div class="kicker">${ev.kicker}</div>
-      <h2 class="card-title">${ev.title}</h2>
-      <div class="narr">${ev.text}</div>
-    </div>
-    <div class="choices">${choices}</div>
-  </div>`;
-}
-
-function haveOf(k) {
-  if (['gold', 'troops', 'morale', 'faith', 'hp'].includes(k)) return state[k];
-  return state.inv[k] || 0;
-}
-
-function labelOf(k) {
-  if (k === 'gold') return '금화';
-  if (k === 'troops') return '병력';
-  if (k === 'morale') return '민심';
-  if (k === 'faith') return '신뢰';
-  if (k === 'hp') return '체력';
-  if (ITEMS[k]) return ITEMS[k].name;
-  return k;
-}
-
-function pickEvent() {
-  // romance / story priority
-  const forced = EVENTS.find(e => e.weight === 0 && !state.seen[e.id] && (!e.minDay || state.day >= e.minDay) && (!e.cond || e.cond(state)));
-  if (forced) return setEvent(forced);
-
-  const pool = EVENTS.filter(e => {
-    if (e.weight === 0) return false;
-    if (e.once && state.seen[e.id]) return false;
-    if (e.minDay && state.day < e.minDay) return false;
-    if (e.cond && !e.cond(state)) return false;
-    if (e.id === state.lastEventId) return false;
+  /* 납품 의뢰 마감 */
+  s.quests = s.quests.filter(q => {
+    if (s.day >= q.due) { addLog(`의뢰 만료: ${q.label}`); return false; }
     return true;
   });
-  const bag = [];
-  pool.forEach(e => { for (let i = 0; i < (e.weight || 1); i++) bag.push(e); });
-  const ev = bag.length ? bag[rnd(0, bag.length - 1)] : EVENTS.find(e => e.repeat);
-  setEvent(ev);
-}
-function setEvent(ev) {
-  state.pending = { ...ev, phase: 'choice', resultText: null };
-  state.lastEventId = ev.id;
-  state.seen[ev.id] = true;
-  delete state.pending.cond;
-  save();
-}
 
-/* ── 선택 처리 ────────────────────────── */
-function choose(i) {
-  const ev = state.pending;
-  const c = ev.choices[i];
-  if (!c) return;
-
-  if (c.battle) { startBattle(c, ev); return; }
-
-  const changed = applyEffects(c.eff || {}, c.cost);
-  ev.phase = 'result';
-  ev.resultText = (c.res || '') + effectSummary(c.eff || {}, c.cost);
-  state.lastResult = ev.resultText;
-  journalAdd(ev.title, c.t, changed);
-  flashStats(changed);
-  save();
-  if (checkFail()) return;
-  render();
-}
-
-function applyEffects(eff, cost) {
-  const changed = [];
-  if (cost) for (const [k, v] of Object.entries(cost)) {
-    if (v <= 0) continue;
-    if (k === 'gold') { state.gold -= v; changed.push('gold'); }
-    else if (k === 'troops') { state.troops -= v; changed.push('troops'); }
-    else if (k === 'morale') { state.morale -= v; changed.push('morale'); }
-    else if (k === 'faith') { state.faith -= v; changed.push('faith'); }
-    else if (k === 'hp') { state.hp -= v; changed.push('hp'); }
-    else if (k === 'items') { for (const [ik, iv] of Object.entries(v)) state.inv[ik] = Math.max(0, (state.inv[ik] || 0) - iv); }
-    else if (state.inv[k] !== undefined) { state.inv[k] -= v; }
+  /* 무작위 사건 확률 */
+  const evtRoll = Math.random();
+  let pendingEvent = null;
+  if (evtRoll < 0.42) {
+    const pool = EVENTS.filter(e => {
+      if (s.day < (e.minDay || 1)) return false;
+      if (e.once && s.flags['ev_' + e.id]) return false;
+      if (e.requireChild && !s.children.length) return false;
+      if (e.minFaith && s.faith < e.minFaith) return false;
+      if (e.phase && !e.phase.includes(0)) return false;
+      if (e.requireBld) {
+        for (const b in e.requireBld) if ((s.bld[b] || 0) < e.requireBld[b]) return false;
+      }
+      return true;
+    });
+    if (pool.length) pendingEvent = pick(pool);
   }
-  for (const [k, v] of Object.entries(eff)) {
-    if (k === 'items') {
-      for (const [ik, iv] of Object.entries(v)) state.inv[ik] = Math.max(0, (state.inv[ik] || 0) + iv);
-      continue;
-    }
-    if (k === 'affS') { state.aff.serena = clamp(state.aff.serena + v, 0, 5); changed.push('aff'); continue; }
-    if (k === 'affM') { state.aff.mira = clamp(state.aff.mira + v, 0, 5); changed.push('aff'); continue; }
-    if (k === 'flags') { v.forEach(f => state.flags[f] = true); continue; }
-    if (k in state && typeof state[k] === 'number') {
-      state[k] = state[k] + v;
-      changed.push(k);
-    }
+
+  /* 파산 판정 */
+  if (s.gold < -80) {
+    s.gameOver = true;
+    saveGame();
+    return { over: 'bankrupt', inc };
   }
-  // clamp bar stats
-  ['morale', 'faith'].forEach(k => state[k] = clamp(state[k], 0, 100));
-  state.troops = Math.max(0, state.troops);
-  state.hp = Math.min(state.hp, state.maxHp);
-  return [...new Set(changed)];
-}
 
-function effectSummary(eff, cost) {
-  const parts = [];
-  const add = (label, v, cls) => parts.push(`<span class="tag ${cls}">${label} ${v > 0 ? '+' : '−'}${won(Math.abs(v))}</span>`);
-  if (cost) for (const [k, v] of Object.entries(cost)) {
-    if (k === 'items') { for (const [ik, iv] of Object.entries(v)) add(ITEMS[ik].name, -iv, 'bad'); continue; }
-    if (v > 0) add(labelOf(k), -v, 'bad');
+  /* 날짜 진행 */
+  s.day++;
+  s.dayOfSeason++;
+  if (s.dayOfSeason > DAYS_PER_SEASON) {
+    s.dayOfSeason = 1;
+    s.season = (s.season + 1) % 4;
+    if (s.season === 0) { s.year++; milestone(`🎉 ${s.year}년차`, '아르덴의 연대기에 새 한 해가 열렸다.'); }
+    milestone(`${SEASON_ICON[s.season]} ${SEASONS[s.season]}이 되었다`, weather().desc);
   }
-  for (const [k, v] of Object.entries(eff)) {
-    if (['items', 'flags'].includes(k)) continue;
-    if (k === 'affS') { add('셀레나 호감', v, v > 0 ? 'good' : 'bad'); continue; }
-    if (k === 'affM') { add('미라 호감', v, v > 0 ? 'good' : 'bad'); continue; }
-    add(labelOf(k), v, v > 0 ? 'good' : 'bad');
+  s.ap = apMax(); s.apUsed = 0; s.phase = 0; s.hp = Math.min(s.maxHp, s.hp + 30);
+  s.visited = {}; G.talkedCount = {};
+  if (s.gold > 500 && !s.flags.m_rich) { s.flags.m_rich = true; milestone('💰 부유한 변경령', '곳간이 넉넉해졌다. 사람들의 발길이 담요 넘는다.'); }
+  if (s.troops > 25 && !s.flags.m_troops) { s.flags.m_troops = true; milestone('🛡 강한 성벽', '수비대가 늘었다. 검은숲이 조용해졌다.'); }
+  if (s.morale > 85 && !s.flags.m_love) { s.flags.m_love = true; milestone('💗 사랑받는 영주', '민심이 높다. 아이들이 성문 앞에서 손을 흔든다.'); }
+
+  saveGame();
+  return { inc, pendingEvent };
+}
+
+/* ── 사건 ─────────────────────────────────────────────────── */
+function runEventChoice(ev, choice) {
+  const s = G.state;
+  const cost = choice.cost || {};
+  for (const k in cost) {
+    if (k === 'gold') { if (s.gold < cost[k]) return null; }
+    else if (ITEMS[k] && itemCount(k) < cost[k]) return null;
+    else if (k === 'troops' && s.troops < cost[k]) return null;
+    else if (k === 'potion' && itemCount('potion') < cost[k]) return null;
   }
-  if (eff.items) for (const [ik, iv] of Object.entries(eff.items)) add(ITEMS[ik].name, iv, iv > 0 ? 'good' : 'bad');
-  return parts.length ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px">${parts.join('')}</div>` : '';
+  for (const k in cost) {
+    if (k === 'gold') s.gold -= cost[k];
+    else if (k === 'troops') s.troops -= cost[k];
+    else s.items[k] -= cost[k];
+  }
+  applyDelta(choice.d);
+  if (choice.battle) return { battle: choice.battle, res: choice.res, rep: choice.rep };
+  if (choice.rep) for (const k in choice.rep) s.rep[k] = (s.rep[k] || 0) + choice.rep[k];
+  s.flags['ev_' + ev.id] = true;
+  addLog(`[${ev.title}] ${choice.t}`);
+  saveGame();
+  return { res: choice.res };
 }
 
-function journalAdd(title, choice, changed) {
-  state.journal.unshift({ day: state.day, title, choice });
-  if (state.journal.length > 60) state.journal.pop();
+/* ── 전투 ─────────────────────────────────────────────────── */
+function playerAtk() {
+  const s = G.state;
+  let atk = 8 + Math.floor(s.troops / 6);
+  if (s.equip.weapon === 'sword') atk += 6;
+  return atk;
+}
+function playerDef() {
+  const s = G.state;
+  return s.equip.armor === 'cloak' ? 4 : 0;
+}
+function battleSupport() {
+  const s = G.state;
+  for (const id in s.rel) {
+    if ((s.rel[id] === 'lover' || s.rel[id] === 'wife' || s.rel[id] === 'ally') && (s.aff[id] || 0) >= 400) return CHARS[id];
+  }
+  if ((s.aff.kael || 0) >= 300) return CHARS.kael;
+  return null;
 }
 
-/* ── 다음 날 ──────────────────────────── */
-function nextDay() {
-  if (state.day >= MAX_DAY) return finish();
-  state.day++;
-  state.talked = { serena: false, mira: false };
-  state.gifted = { serena: false, mira: false };
-  state.pending = null;
-  state.lastResult = null;
+/* ── 로맨스 · 관계 ────────────────────────────────────────── */
+const REL_LABEL = { wife: '아내', lover: '연인', concubine: '첩', ally: '가신', friend: '친구' };
 
-  // 영지 수입 / 유지비
-  const income = Math.round(4 + state.morale / 9);
-  const upkeep = Math.ceil(state.troops / 9);
-  state.gold += income - upkeep;
-  state.hp = clamp(state.hp + 3, 0, state.maxHp);
-  if (state.day % 4 === 0 && state.morale < 50) state.morale += 1;
-  if (state.day % 5 === 0 && state.faith > 0) state.faith -= 1;
-
-  save();
-  if (checkFail()) return;
-  pickEvent();
-  state.tab = 'estate';
-  render();
+function canConfess(id) {
+  const s = G.state;
+  const c = CHARS[id];
+  if (!c || !c.romance) return { ok: false, why: '로맨스 루트가 아니다' };
+  const aff = s.aff[id] || 0;
+  if (aff < 800) return { ok: false, why: '호감도 부족 (8하트 필요)' };
+  if (c.deepRoute && trustOf(id) < 40) return { ok: false, why: '신뢰 부족 — 이야기를 더 파고들어야 한다' };
+  if (s.rel[id]) return { ok: false, why: '이미 관계가 있다' };
+  return { ok: true };
 }
 
-/* ── 실패 판정 ────────────────────────── */
-function checkFail() {
-  if (state.gold < 0) return finish('ruin_gold');
-  if (state.morale <= 0) return finish('ruin_morale');
-  if (state.faith <= 0) return finish('ruin_faith');
-  if (state.troops <= 0) return finish('ruin_troops');
-  if (state.hp <= 0) return finish('ruin_hp');
-  return false;
+function doConfess(id, kind) {
+  const s = G.state;
+  const c = CHARS[id];
+  s.rel[id] = kind;
+  if (kind === 'wife') { s.wedding[id] = s.day; addLog(`${c.name}와 혼인했다.`); milestone(`💍 ${c.name}와의 혼인`, '영주 저택의 내실에 새 문패가 걸렸다.'); }
+  if (kind === 'lover') addLog(`${c.name}와 연인이 되었다.`);
+  if (kind === 'concubine') { s.wedding[id] = s.day; addLog(`${c.name}를 저택 별채에 들였다.`); milestone(`🏠 별채의 주인`, `${c.name}가 저택에 머무르게 되었다.`); }
+  if (kind === 'ally') { addLog(`${c.name}를 가신으로 들였다.`); milestone(`🤝 가신 계약`, `${c.name}가 아르덴의 가신이 되었다.`); }
+  saveGame();
 }
 
-function finish(forcedKey) {
-  state.ended = true;
-  state.ending = forcedKey || decideEnding();
-  state.battle = null;
-  save();
-  render();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function spouses() { return Object.keys(G.state.rel).filter(id => G.state.rel[id] === 'wife'); }
+function residents() {
+  return Object.keys(G.state.rel).filter(id => ['wife', 'concubine'].includes(G.state.rel[id]));
+}
+function manorSlots() { return [0, 1, 2, 3][G.state.bld.manor]; }
+
+function tryConceive() {
+  const s = G.state;
+  if (s.pregnant) return;
+  const sp = spouses()[0];
+  if (!sp) return;
+  const since = s.day - (s.wedding[sp] || s.day);
+  if (since < 15 || (s.aff[sp] || 0) < 600) return;
+  if (Math.random() < 0.12) {
+    s.pregnant = { mom: sp, days: 0 };
+    addLog('좋은 소식이 저택에 울렸다. 새 식구가 올 것이다.');
+    milestone('🌱 새 생명', `${CHARS[sp].name}의 월경이 멈췄다. 영주 저택에 기쁨이 찾아온다.`);
+  }
 }
 
-function decideEnding() {
-  const { gold, troops, morale, faith } = state;
-  const a = state.aff;
-  if (a.serena >= 4 && a.mira >= 4 && morale >= 60) return 'two';
-  if (morale >= 70 && faith >= 60 && gold >= 160) return 'saint';
-  if (faith >= 70 && a.serena >= 3) return 'church';
-  if (gold >= 180 && a.mira >= 3) return 'merchant';
-  if (a.serena <= 1 && a.mira <= 1) return 'lone';
-  return 'survive';
-}
-
-function renderEnding() {
-  const e = ENDINGS[state.ending] || ENDINGS.survive;
-  const hearts = n => Array.from({ length: 5 }, (_, i) => `<i class="${i < n ? 'on' : ''}">♥</i>`).join('');
-  screenEl.innerHTML = `
-    <div class="ending">
-      <div class="kicker">${e.sub}</div>
-      <h1>${e.title}</h1>
-      <div class="sub">DAY ${state.day} / ${MAX_DAY}</div>
-      <div class="art"><img src="${e.art}" alt=""></div>
-      <div class="epi">${e.epi}</div>
-      <div class="summary">
-        <div><span>재정</span><b>${won(state.gold)}</b></div>
-        <div><span>병력</span><b>${state.troops}</b></div>
-        <div><span>민심</span><b>${state.morale}</b></div>
-        <div><span>교단 신뢰</span><b>${state.faith}</b></div>
-      </div>
-      <div class="panel" style="text-align:left">
-        <div class="panel-title">인연 <small>AFFECTION</small></div>
-        <div class="person" style="border:0;padding:6px 0">
-          <div class="avatar"><img src="assets/serena_portrait.png" alt=""></div>
-          <div class="pbody"><div class="pname">셀레나</div><div class="hearts">${hearts(state.aff.serena)}</div></div>
-        </div>
-        <div class="person" style="border:0;padding:6px 0 0">
-          <div class="avatar"><img src="assets/mira_portrait.png" alt=""></div>
-          <div class="pbody"><div class="pname">미라</div><div class="hearts">${hearts(state.aff.mira)}</div></div>
-        </div>
-      </div>
-      <div class="btn-row" style="margin-top:18px">
-        <button class="btn solid" data-act="restart">다시 시작</button>
-      </div>
-      <div class="foothint">모든 엔딩은 하나의 겨울에서 갈라집니다.</div>
-    </div>`;
-}
-
-/* ── 상회 ─────────────────────────────── */
-function renderMarket() {
-  const matRows = Object.entries(ITEMS).filter(([, v]) => v.kind === 'mat').map(([id, it]) => {
-    const p = priceOf(id, state.day);
-    const prev = priceOf(id, state.day - 1);
-    const cls = p > prev ? 'up' : p < prev ? 'down' : '';
-    return `<div class="row">
-      <div class="ico">${it.icon}</div>
-      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 어제 ${prev} → 오늘 ${p}</small></div>
-      <div class="price ${cls}">${p} G</div>
-      <button class="mini" data-act="buy" data-id="${id}" ${state.gold < buyPrice(id) ? 'disabled' : ''}>매입 ${buyPrice(id)}</button>
-    </div>`;
-  }).join('');
-
-  const goodRows = Object.entries(ITEMS).filter(([, v]) => v.kind === 'good').map(([id, it]) => {
-    const p = priceOf(id, state.day);
-    const prev = priceOf(id, state.day - 1);
-    const cls = p > prev ? 'up' : p < prev ? 'down' : '';
-    return `<div class="row">
-      <div class="ico">${it.icon}</div>
-      <div class="nm">${it.name}<small>보유 ${state.inv[id] || 0} · 어제 ${prev} → 오늘 ${p}</small></div>
-      <div class="price ${cls}">${p} G</div>
-      <button class="mini sell" data-act="sell" data-id="${id}" ${(state.inv[id] || 0) <= 0 ? 'disabled' : ''}>판매</button>
-    </div>`;
-  }).join('');
-
-  const recipes = RECIPES.map(r => {
-    const lack = Object.entries(r.need).filter(([k, v]) => (state.inv[k] || 0) < v);
-    const can = lack.length === 0 && state.gold >= r.fee;
-    return `<div class="row">
-      <div class="ico">${ITEMS[r.out].icon}</div>
-      <div class="nm">${r.name}<small>${Object.entries(r.need).map(([k, v]) => `${ITEMS[k].name} ${v}`).join(' · ')} + ${r.fee} G</small></div>
-      <button class="mini" data-act="craft" data-id="${r.out}" ${can ? '' : 'disabled'}>제작</button>
-    </div>`;
-  }).join('');
-
-  const equipRows = [
-    { id: 'sword', name: '강철 검', desc: '장비하면 공격력 +3 (1회)', enabled: (state.inv.sword || 0) > 0 },
-    { id: 'cloak', name: '방한 망토', desc: '장비하면 최대 체력 +10 (1회)', enabled: (state.inv.cloak || 0) > 0 },
-  ].map(e => `<div class="row">
-      <div class="ico">${ITEMS[e.id].icon}</div>
-      <div class="nm">${e.name}<small>${e.desc}</small></div>
-      <button class="mini" data-act="equip" data-id="${e.id}" ${e.enabled ? '' : 'disabled'}>장비</button>
-    </div>`).join('');
-
-  screenEl.innerHTML = `
-    <div class="sheet-head">
-      <div><div class="sheet-title">상회</div><div class="sheet-sub">MARKET · DAY ${state.day}</div></div>
-      <div class="chip">금화 <b>${won(state.gold)}</b></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">시세 <small>매일 변동 · 매입은 1.28배</small></div>
-      ${matRows}
-    </div>
-    <div class="panel">
-      <div class="panel-title">특산품 <small>SELL</small></div>
-      ${goodRows}
-    </div>
-    <div class="panel">
-      <div class="panel-title">제작 <small>CRAFT</small></div>
-      ${recipes}
-    </div>
-    <div class="panel">
-      <div class="panel-title">장비 <small>EQUIP</small></div>
-      ${equipRows}
-      <div class="row" style="border-top:1px solid var(--line-soft)">
-        <div class="ico">🗡</div>
-        <div class="nm">현재 공격력<small>검격 피해 ${Math.max(1, state.atk - 2)}~${state.atk + 4} · 체력 ${state.hp}/${state.maxHp}</small></div>
-      </div>
-    </div>
-    <div class="foot hint foothint">상회는 하루에 한 번 시세가 갱신됩니다.</div>`;
-}
-
-function buy(id) {
-  const p = buyPrice(id);
-  if (state.gold < p) return toast('금화가 부족합니다');
-  state.gold -= p; state.inv[id] = (state.inv[id] || 0) + 1;
-  toast(`${ITEMS[id].name} 매입 · −${p} G`);
-  save(); renderMarket(); renderHUD();
-}
-function sell(id) {
-  if ((state.inv[id] || 0) <= 0) return toast('보유한 물건이 없습니다');
-  const p = priceOf(id, state.day);
-  state.gold += p; state.inv[id]--;
-  toast(`${ITEMS[id].name} 판매 · +${p} G`);
-  save(); renderMarket(); renderHUD();
-}
-function craft(id) {
-  const r = RECIPES.find(x => x.out === id);
-  if (!r) return;
-  for (const [k, v] of Object.entries(r.need)) if ((state.inv[k] || 0) < v) return toast('재료가 부족합니다');
-  if (state.gold < r.fee) return toast('금화가 부족합니다');
-  for (const [k, v] of Object.entries(r.need)) state.inv[k] -= v;
-  state.gold -= r.fee; state.inv[id] = (state.inv[id] || 0) + 1;
-  toast(`${r.name} 제작 완료`);
-  save(); renderMarket(); renderHUD();
-}
-function equip(id) {
-  if ((state.inv[id] || 0) <= 0) return toast('보유한 물건이 없습니다');
-  if (id === 'sword') { state.inv.sword--; state.atk += 3; toast('강철 검 장비 · 공격력 +3'); }
-  if (id === 'cloak') { state.inv.cloak--; state.maxHp += 10; state.hp += 10; toast('방한 망토 장비 · 최대 체력 +10'); }
-  save(); renderMarket(); renderHUD();
-}
-
-/* ── 인물 ─────────────────────────────── */
-function renderPeople() {
-  const card = (key) => {
-    const p = PEOPLE[key], aff = state.aff[key];
-    const hearts = Array.from({ length: 5 }, (_, i) => `<i class="${i < aff ? 'on' : ''}">♥</i>`).join('');
-    const talked = state.talked[key], gifted = state.gifted[key];
-    const likeIds = p.likes;
-    const giftOptions = likeIds.filter(id => (state.inv[id] || 0) > 0);
-    return `<div class="person">
-      <div class="avatar" data-act="portrait" data-key="${key}"><img src="${p.portrait}" alt=""></div>
-      <div class="pbody">
-        <div class="pname">${p.name}</div>
-        <div class="prole">${p.role}</div>
-        <div class="hearts">${hearts}</div>
-        <div class="pdesc">${p.desc}</div>
-        <div class="pacts">
-          <button class="mini" data-act="talk" data-key="${key}" ${talked ? 'disabled' : ''}>${talked ? '오늘 완료' : '대화'}</button>
-          <button class="mini" data-act="gift" data-key="${key}" data-id="${giftOptions[0] || ''}" ${(gifted || !giftOptions.length) ? 'disabled' : ''}>
-            ${gifted ? '선물 완료' : giftOptions.length ? `${ITEMS[giftOptions[0]].name} 선물` : '선물 없음'}
-          </button>
-        </div>
-      </div>
-    </div>`;
+function birthChild(momId) {
+  const s = G.state;
+  const mom = CHARS[momId];
+  const sex = Math.random() < 0.5 ? '딸' : '아들';
+  const hair = { serena: '백금발', mira: '적갈색 머리', claire: '은발', seraphine: '흑발', ellen: '백금발', lana: '적발', mill: '갈색 머리' }[momId] || '갈색 머리';
+  const child = {
+    id: 'c' + s.day, name: null, sex, mom: momId, born: s.day, stage: 'infant',
+    hair, temp: TRAITS[mom.trait] ? TRAITS[mom.trait].name : '평온',
   };
-  screenEl.innerHTML = `
-    <div class="sheet-head">
-      <div><div class="sheet-title">인물</div><div class="sheet-sub">BONDS · DAY ${state.day}</div></div>
-      <div class="chip">♥ <b>${state.aff.serena + state.aff.mira}</b>/10</div>
-    </div>
-    <div class="panel">${card('serena')}${card('mira')}</div>
-    <div class="panel">
-      <div class="panel-title">영주 <small>LORD</small></div>
-      <div class="row">
-        <div class="ico">⚔</div>
-        <div class="nm">체력<small>${state.hp} / ${state.maxHp} · 공격력 ${state.atk}</small></div>
-        <div class="bar self" style="width:88px"><span style="width:${Math.round(state.hp / state.maxHp * 100)}%"></span></div>
-      </div>
-      <div class="row">
-        <div class="ico">◈</div>
-        <div class="nm">보유품<small>${Object.entries(state.inv).filter(([, v]) => v > 0).map(([k, v]) => `${ITEMS[k].name} ${v}`).join(' · ') || '없음'}</small></div>
-      </div>
-    </div>
-    <div class="foothint">대화와 선물은 하루에 한 번씩. 호감도 4가 되면 전용 사건이 열립니다.</div>`;
+  s.children.push(child);
+  SFX.play('level');
+  milestone(sex === '딸' ? '👶 딸이 태어났다' : '👶 아들이 태어났다', `${mom.name}의 아이. ${hair}을 물려받았다. 이름을 지어줘야 한다.`);
 }
 
-function talk(key) {
-  if (state.talked[key]) return toast('오늘은 이미 이야기했습니다');
-  state.talked[key] = true;
-  const lines = TALK[key];
-  const line = lines[Math.min(state.aff[key], lines.length - 1)];
-  const before = state.aff[key];
-  state.aff[key] = clamp(state.aff[key] + 1, 0, 5);
-  const grew = state.aff[key] > before;
-  openModal(`
-    <div class="modal-head"><div class="modal-title">${PEOPLE[key].name}</div><button class="x" data-act="close-modal">✕</button></div>
-    <div class="big-art" style="height:150px"><img src="${PEOPLE[key].portrait}" style="height:150px;border-radius:12px"></div>
-    <p class="narr">${line}</p>
-    <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
-      ${grew ? '<span class="tag good">호감도 +1</span>' : '<span class="tag">호감도 최대</span>'}
-    </div>
-    <div class="btn-row" style="margin-top:16px"><button class="btn" data-act="close-modal">닫기</button></div>
-  `);
-  journalAdd(`${PEOPLE[key].name}와의 대화`, '', []);
-  save(); renderHUD();
+function childStageOK(c) {
+  return G.state.day - c.born >= 60 && c.stage === 'infant';
 }
 
-function gift(key) {
-  if (state.gifted[key]) return toast('오늘은 이미 선물했습니다');
-  const p = PEOPLE[key];
-  const id = p.likes.find(x => (state.inv[x] || 0) > 0);
-  if (!id) return toast('선물할 물건이 없습니다');
-  state.inv[id]--; state.gifted[key] = true;
-  const liked = true;
-  const before = state.aff[key];
-  state.aff[key] = clamp(state.aff[key] + (liked ? 2 : 1), 0, 5);
-  openModal(`
-    <div class="modal-head"><div class="modal-title">${p.name}에게 선물</div><button class="x" data-act="close-modal">✕</button></div>
-    <div class="big-art" style="height:150px"><img src="${p.portrait}" style="height:150px;border-radius:12px"></div>
-    <p class="narr">${GIFTS[key][id] || `${p.name}가 선물을 받아 들고 웃었다.`}</p>
-    <div style="margin-top:12px"><span class="chip">${ITEMS[id].name} <b>−1</b></span> <span class="tag good">호감도 +${state.aff[key] - before}</span></div>
-    <div class="btn-row" style="margin-top:16px"><button class="btn" data-act="close-modal">닫기</button></div>
-  `);
-  journalAdd(`${p.name}에게 ${ITEMS[id].name} 선물`, '', []);
-  save(); renderHUD();
+/* ── 가신 · 알아보기 ─────────────────────────────────────── */
+function recruitCost(c) {
+  return { gold: 60 + Math.floor(rnd(0, 40)), item: c.gift, qty: 1 };
 }
 
-/* ── 기록 ─────────────────────────────── */
-function renderJournal() {
-  const rows = state.journal.length ? state.journal.map(j => `
-    <div class="row" style="align-items:flex-start">
-      <div class="ico" style="font-family:var(--mono);font-size:11px;color:var(--gold-dim)">D${j.day}</div>
-      <div class="nm">${j.title}<small>${j.choice || ''}</small></div>
-    </div>`).join('') : '<div class="empty">아직 기록이 없습니다.</div>';
-
-  screenEl.innerHTML = `
-    <div class="sheet-head">
-      <div><div class="sheet-title">기록</div><div class="sheet-sub">CHRONICLE · DAY ${state.day}/${MAX_DAY}</div></div>
-      <div class="chip">항목 <b>${state.journal.length}</b></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">영지일지 <small>최근 30</small></div>
-      ${rows}
-    </div>
-    <div class="panel">
-      <div class="panel-title">설정 <small>SYSTEM</small></div>
-      <div class="row">
-        <div class="ico">💾</div>
-        <div class="nm">자동 저장<small>매 선택마다 기기에 저장됩니다</small></div>
-      </div>
-      <div class="row">
-        <div class="ico">↺</div>
-        <div class="nm">처음부터<small>저장 기록을 지우고 새로 시작합니다</small></div>
-        <button class="mini" data-act="reset">새 게임</button>
-      </div>
-    </div>
-    <div class="foothint">《외뿔의 악마》 세계관 팬 프로토타입 v1.0</div>`;
-}
-
-/* ── 전투 ─────────────────────────────── */
-function startBattle(choice, ev) {
-  const b = choice.battle;
-  state.battle = {
-    name: b.name, hp: b.hp, maxHp: b.hp, atk: b.atk, art: b.art || 'wolf',
-    boss: b.boss, loot: b.loot, log: [], over: false, guard: false,
-    source: { res: choice.res || '', title: ev.title, choice: choice.t },
-  };
-  state.battle.log.push(`<div>⚔ ${b.name}${josa(b.name, '이', '가')} 덤벼든다.</div>`);
-  save(); render();
-}
-
-function renderBattle() {
-  const b = state.battle;
-  screenEl.innerHTML = `
-    <div class="card" style="padding:14px 14px 16px">
-      <div class="battle">
-        <div class="enemy" id="enemyBox">
-          <span class="scene-tag">ENCOUNTER</span>
-          <img src="assets/${b.art}.png" alt="">
-        </div>
-        <div class="hprow">
-          <div class="lab"><span>${b.name}</span><span>${Math.max(0, b.hp)} / ${b.maxHp}</span></div>
-          <div class="bar hp"><span style="width:${Math.max(0, b.hp / b.maxHp * 100)}%"></span></div>
-        </div>
-        <div class="hprow">
-          <div class="lab"><span>영주</span><span>${Math.max(0, state.hp)} / ${state.maxHp}</span></div>
-          <div class="bar self"><span style="width:${Math.max(0, state.hp / state.maxHp * 100)}%"></span></div>
-        </div>
-        <div class="log" id="logBox">${b.log.join('')}</div>
-        ${b.over ? `
-          <div class="btn-row"><button class="btn solid" data-act="battle-end">계속</button></div>
-        ` : `
-          <div class="choices" style="padding:0">
-            <button class="choice" data-act="b-atk"><span class="ct">검격 — 검을 곧게 내지른다</span><span class="meta"><span class="tag bad">${Math.max(1, state.atk - 2)}~${state.atk + 4} 피해</span></span></button>
-            <button class="choice" data-act="b-guard"><span class="ct">방진 — 방패를 세우고 버틴다</span><span class="meta"><span class="tag">피해 65% 감소</span><span class="tag good">반격 2</span></span></button>
-            <button class="choice" data-act="b-item"><span class="ct">${(state.inv.potion || 0) > 0 ? '치유 물약 — 상처를 메운다' : '기도 — 짧게 빌고 숨을 고른다'}</span><span class="meta">${(state.inv.potion || 0) > 0 ? `<span class="tag good">HP +16 · 보유 ${state.inv.potion}</span>` : '<span class="tag good">HP +6</span>'}</span></button>
-          </div>
-        `}
-      </div>
-    </div>`;
-  const lg = $('#logBox'); if (lg) lg.scrollTop = lg.scrollHeight;
-}
-
-function battleAct(kind) {
-  const b = state.battle;
-  if (!b || b.over) return;
-  let skipEnemy = false;
-
-  if (kind === 'atk') {
-    const dmg = rnd(Math.max(1, state.atk - 2), state.atk + 4);
-    b.hp -= dmg;
-    b.log.push(`<div>▸ 검격 — <span class="dmg">${dmg}</span> 피해</div>`);
-  } else if (kind === 'guard') {
-    b.guard = true;
-    if (b.hp > 0) { b.hp -= 2; b.log.push(`<div>▸ 방진 — 자세를 낮추고 반격 <span class="dmg">2</span></div>`); }
-  } else if (kind === 'item') {
-    if ((state.inv.potion || 0) > 0) {
-      state.inv.potion--; state.hp = clamp(state.hp + 16, 0, state.maxHp);
-      b.log.push(`<div>▸ 치유 물약 — <span class="heal">HP +16</span></div>`);
-    } else {
-      state.hp = clamp(state.hp + 6, 0, state.maxHp);
-      state.faith = clamp(state.faith + 1, 0, 100);
-      b.log.push(`<div>▸ 기도 — <span class="heal">HP +6</span></div>`);
-    }
-    skipEnemy = false;
+/* ── 의뢰 생성 ────────────────────────────────────────────── */
+function genQuests() {
+  const s = G.state;
+  const want = 1 + (s.bld.market >= 3 ? 1 : 0);
+  while (s.quests.length < want) {
+    const froms = [
+      { from: '타이셀 왕국', icon: '👑' },
+      { from: '비아 상단', icon: '🛒' },
+      { from: '크렌 교구', icon: '⛪' },
+    ];
+    const f = pick(froms);
+    const pool = ['potion', 'cloak', 'lamp', 'sword', 'elixir'];
+    const item = pick(pool.slice(0, 2 + s.bld.workshop));
+    const qty = ri(1, 2);
+    const reward = Math.round(sellPrice(item) * qty * rnd(1.5, 2.1)) + 12;
+    s.quests.push({
+      id: s.questSeq++, item, qty, reward, from: f.from, icon: f.icon,
+      due: s.day + ri(3, 6), label: `${ITEMS[item].name} ×${qty}`,
+    });
   }
-
-  if (b.hp <= 0) return battleWin();
-
-  // enemy turn
-  let edmg = rnd(Math.max(1, b.atk - 2), b.atk + 2);
-  if (b.guard) edmg = Math.max(1, Math.round(edmg * 0.35));
-  state.hp -= edmg;
-  b.log.push(`<div>◂ ${b.name}의 공격 — <span class="dmg">${edmg}</span></div>`);
-  b.guard = false;
-
-  if (state.hp <= 0) return battleLose();
-
-  save(); renderBattle();
 }
 
-function battleWin() {
-  const b = state.battle;
-  b.over = true;
-  const loot = b.loot || {};
-  if (loot.gold) state.gold += loot.gold;
-  if (loot.items) for (const [k, v] of Object.entries(loot.items)) state.inv[k] = (state.inv[k] || 0) + v;
-  state.morale = clamp(state.morale + (b.boss ? 8 : 3), 0, 100);
-  const lootTxt = [
-    loot.gold ? `금화 +${loot.gold}` : '',
-    ...Object.entries(loot.items || {}).map(([k, v]) => `${ITEMS[k].name} +${v}`),
-  ].filter(Boolean).join(' · ');
-  b.log.push(`<div class="win">◆ ${b.name}${josa(b.name, '을', '를')} 쓰러뜨렸다.${lootTxt ? ` ${lootTxt}` : ''}</div>`);
-  save(); renderBattle();
+/* ── 채집 / 생산 ──────────────────────────────────────────── */
+function gatherForest() {
+  const s = G.state;
+  const w = weather();
+  const loot = {};
+  const herbN = Math.max(1, Math.round(rnd(1, 3) * w.gather + (s.bld.greenhouse ? 1 : 0)));
+  loot.herb = herbN;
+  if (Math.random() < 0.35) loot.iron = 1;
+  if (Math.random() < 0.2) loot.pelt = 1;
+  if (Math.random() < 0.1) loot.mana = 1;
+  return loot;
 }
 
-function battleLose() {
-  const b = state.battle;
-  b.over = true;
-  state.hp = 1;
-  const lost = Math.round(state.gold * 0.4);
-  state.gold = Math.max(0, state.gold - lost);
-  state.morale = clamp(state.morale - 12, 0, 100);
-  state.troops = Math.max(0, state.troops - 3);
-  b.log.push(`<div class="dmg">✕ 쓰러졌다. 부관이 끌어냈다. 금화 −${lost}, 민심 −12</div>`);
-  save(); renderBattle();
+function craft(recipe, times) {
+  const s = G.state;
+  for (const k in recipe.need) if (itemCount(k) < recipe.need[k] * times) return null;
+  for (const k in recipe.need) s.items[k] -= recipe.need[k] * times;
+  s.gold -= recipe.fee * times;
+  const crit = Math.random() < (s.bld.workshop >= 3 ? 0.22 : s.bld.workshop >= 2 ? 0.1 : 0);
+  s.items[recipe.out] = (s.items[recipe.out] || 0) + times + (crit ? 1 : 0);
+  SFX.play('craft');
+  return { crit };
 }
-
-function battleEnd() {
-  const b = state.battle;
-  const won = state.hp > 1 || b.hp <= 0;
-  const ev = state.pending;
-  const res = b.source.res;
-  state.battle = null;
-  if (ev) {
-    ev.phase = 'result';
-    ev.resultText = `${res}${b.hp <= 0 ? '' : '\n\n상처를 감고 성으로 돌아왔다.'}`;
-  }
-  journalAdd(b.source.title, b.source.choice, []);
-  save();
-  if (checkFail()) return;
-  state.tab = 'estate';
-  render();
-}
-
-/* ── 모달 ─────────────────────────────── */
-function openModal(html) {
-  overlayEl.innerHTML = `<div class="modal">${html}</div>`;
-  overlayEl.classList.remove('hidden');
-}
-function closeModal() { overlayEl.classList.add('hidden'); overlayEl.innerHTML = ''; }
-
-/* ── 이벤트 위임 ──────────────────────── */
-document.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-act]');
-  if (!el) {
-    if (e.target === overlayEl) closeModal();
-    return;
-  }
-  const act = el.dataset.act;
-  switch (act) {
-    case 'new': state = newState(); save(); state.tab = 'estate'; pickEvent(); render(); break;
-    case 'continue': { const s = load(); if (s) { state = s; render(); } break; }
-    case 'choose': choose(Number(el.dataset.i)); break;
-    case 'next-day': nextDay(); break;
-    case 'buy': buy(el.dataset.id); break;
-    case 'sell': sell(el.dataset.id); break;
-    case 'craft': craft(el.dataset.id); break;
-    case 'equip': equip(el.dataset.id); break;
-    case 'talk': talk(el.dataset.key); break;
-    case 'gift': gift(el.dataset.key); break;
-    case 'portrait': {
-      const p = PEOPLE[el.dataset.key];
-      openModal(`<div class="modal-head"><div class="modal-title">${p.name}</div><button class="x" data-act="close-modal">✕</button></div>
-        <div class="big-art"><img src="${p.portrait}" alt=""></div>
-        <div class="prole" style="text-align:center">${p.role}</div>
-        <p class="pdesc" style="text-align:center;margin-top:8px">${p.desc}</p>`);
-      break;
-    }
-    case 'close-modal': closeModal(); break;
-    case 'b-atk': battleAct('atk'); break;
-    case 'b-guard': battleAct('guard'); break;
-    case 'b-item': battleAct('item'); break;
-    case 'battle-end': battleEnd(); break;
-    case 'restart': wipe(); state = newState(); save(); pickEvent(); render(); break;
-    case 'reset':
-      if (confirm('저장된 기록을 지우고 처음부터 시작할까요?')) { wipe(); state = newState(); pickEvent(); render(); }
-      break;
-  }
-});
-
-tabsEl.addEventListener('click', (e) => {
-  const t = e.target.closest('.tab');
-  if (!t || state.battle) return;
-  state.tab = t.dataset.tab;
-  save(); render();
-});
-
-/* ── 시작 ─────────────────────────────── */
-state = null;
-renderTitle();
-})();
