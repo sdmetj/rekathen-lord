@@ -129,36 +129,49 @@ function hudHTML() {
 }
 
 function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+/* 받침 판별 조사 */
+function josa(word, a, b) {
+  const s = String(word);
+  const last = s.charCodeAt(s.length - 1);
+  if (isNaN(last)) return s + a;
+  const fin = (last - 0xac00) % 28;
+  return s + (fin === 0 ? a : b);
+}
 
 function showHUD(on) { hudEl().classList.toggle('is-hidden', !on); }
 function showTabs(on) { tabEl().classList.toggle('is-hidden', !on); }
 
 /* ── 영지 지도 SVG ─────────────────────────────────────────── */
 function bldPos(id) {
+  /* [x, baseline y] — 낮은 y가 멀리, 높은 y가 앞줄 */
   return {
-    keep: [200, 52], wall: [200, 196], market: [86, 118], chapel: [318, 112],
-    workshop: [322, 62], tavern: [74, 172], greenhouse: [90, 66], forge: [312, 166], manor: [200, 152],
+    keep: [200, 128], wall: [200, 210], market: [92, 150], chapel: [318, 142],
+    workshop: [330, 106], tavern: [80, 190], greenhouse: [84, 106], forge: [316, 188], manor: [200, 178],
   }[id];
 }
 function drawBld(id, lv, s) {
   const [x, y] = bldPos(id);
   const b = BUILDINGS.find(x2 => x2.id === id);
   const night = s.phase === 2;
-  const lit = night && lv > 0 ? '#ffd88a' : '#c7d0ef';
+  const lit = night ? '#ffd88a' : '#b7c3e8';
   let body = '';
   if (lv === 0) {
-    body = `<rect x="${x - 17}" y="${y - 8}" width="34" height="18" rx="3" fill="rgba(255,255,255,.05)" stroke="rgba(200,210,255,.35)" stroke-dasharray="3 3" stroke-width="1"/>
-      <text x="${x}" y="${y + 20}" text-anchor="middle" font-size="7" fill="rgba(220,228,255,.5)">${b.icon} ${b.name}</text>`;
+    body = `<g opacity=".85">
+      <rect x="${x - 16}" y="${y - 14}" width="32" height="14" rx="2" fill="rgba(30,38,66,.55)" stroke="rgba(200,210,255,.4)" stroke-dasharray="3 3" stroke-width="1"/>
+      <text x="${x}" y="${y + 6}" text-anchor="middle" font-size="7.5" fill="rgba(225,232,255,.75)" font-family="sans-serif">${b.icon} ${b.name}</text>
+    </g>`;
   } else {
-    const h = 14 + lv * 6, w2 = 26 + lv * 6;
-    const wallC = ['#8a6a4a', '#8a6a4a', '#9aa4c9', '#aeb8dd'][lv];
-    const roofC = ['#6b4f38', '#6b4f38', '#5d6a9e', '#6a5fc0'][lv];
+    const h = 13 + lv * 5, w2 = 24 + lv * 5;
+    const wallC = ['#8a6a4a', '#8a6a4a', '#95a1cc', '#a9b5e4'][lv];
+    const roofC = ['#5f4630', '#5f4630', '#59619c', '#675cc4'][lv];
     body = `<g>
+      <ellipse cx="${x}" cy="${y}" rx="${w2 / 2 + 5}" ry="3" fill="rgba(10,12,24,.35)"/>
       <rect x="${x - w2 / 2}" y="${y - h}" width="${w2}" height="${h}" rx="2" fill="${wallC}"/>
-      <polygon points="${x - w2 / 2 - 4},${y - h} ${x + w2 / 2 + 4},${y - h} ${x},${y - h - 12 - lv * 2}" fill="${roofC}"/>
-      <rect x="${x - 3}" y="${y - h + 5}" width="6" height="7" rx="1" fill="${lit}" opacity="${night ? 1 : .75}"/>
-      ${lv >= 3 ? `<line x1="${x}" y1="${y - h - 12 - lv * 2}" x2="${x}" y2="${y - h - 24}" stroke="#d9def7" stroke-width="1"/><polygon points="${x},${y - h - 24} ${x + 10},${y - h - 20} ${x},${y - h - 16}" fill="#ff8fa8"/>` : ''}
-      ${lv >= 2 ? `<rect x="${x - w2 / 2 + 4}" y="${y - h + 4}" width="4" height="4" fill="${lit}" opacity=".8"/><rect x="${x + w2 / 2 - 8}" y="${y - h + 4}" width="4" height="4" fill="${lit}" opacity=".8"/>` : ''}
+      <polygon points="${x - w2 / 2 - 4},${y - h} ${x + w2 / 2 + 4},${y - h} ${x},${y - h - 10 - lv * 2}" fill="${roofC}"/>
+      <rect x="${x - 3}" y="${y - h + 4}" width="6" height="6" rx="1" fill="${lit}" opacity="${night ? 1 : .8}"/>
+      ${lv >= 2 ? `<rect x="${x - w2 / 2 + 3}" y="${y - 6}" width="4" height="6" rx="1" fill="${lit}" opacity=".7"/><rect x="${x + w2 / 2 - 7}" y="${y - 6}" width="4" height="6" rx="1" fill="${lit}" opacity=".7"/>` : ''}
+      ${lv >= 3 ? `<line x1="${x}" y1="${y - h - 10 - lv * 2}" x2="${x}" y2="${y - h - 22}" stroke="#d9def7" stroke-width="1"/><polygon points="${x},${y - h - 22} ${x + 9},${y - h - 18.5} ${x},${y - h - 15}" fill="#ff8fa8"/>` : ''}
+      <text x="${x}" y="${y + 9}" text-anchor="middle" font-size="7.5" fill="${night ? 'rgba(255,235,200,.8)' : 'rgba(25,30,55,.75)'}" font-family="sans-serif">${b.name} ${lv >= 2 ? 'Ⅲ' : lv === 2 ? 'Ⅱ' : ''}</text>
     </g>`;
   }
   return body;
@@ -174,22 +187,32 @@ function territorySVG() {
   };
   const [c1, c2] = night ? skies[2] : s.season === 3 ? skies[0] : s.season === 0 ? ['#3a4a7a', '#7a9ac9'] : s.season === 1 ? skies[1] : skies[3];
   const snow = s.season === 3;
-  const ground = snow ? '#e6ecf7' : s.season === 0 ? '#8fbf7a' : s.season === 1 ? '#7ab06a' : '#c9a86a';
-  const villagerN = Math.max(0, Math.min(6, Math.round(s.morale / 22) + (s.bld.tavern ? 1 : 0)));
+  const ground = snow ? '#dfe8f6' : s.season === 0 ? '#7fae6c' : s.season === 1 ? '#6fa25e' : '#b99a5e';
+  const ground2 = snow ? '#c6d5ee' : s.season === 0 ? '#6e9c5c' : s.season === 1 ? '#5f904f' : '#a5854c';
+  const treeC = snow ? '#2c3a5e' : '#3f6a3c';
+  const snowCap = snow ? '#e8eefb' : '';
+  const villagerN = Math.max(0, Math.min(7, Math.round((s.morale + 100) / 40) + (s.bld.tavern ? 1 : 0)));
   let vill = '';
   for (let i = 0; i < villagerN; i++) {
-    vill += `<circle cx="${40 + i * 46}" cy="${206 + (i % 2) * 4}" r="2.4" fill="${night ? '#ffd88a' : '#3a466e'}"><animate attributeName="opacity" values="1;.5;1" dur="${2 + i * .4}s" repeatCount="indefinite"/></circle>`;
+    vill += `<circle cx="${30 + i * 50}" cy="${200 + (i % 2) * 5}" r="2.6" fill="${night ? '#ffd88a' : '#2c3560'}"><animate attributeName="opacity" values="1;.45;1" dur="${2 + i * .4}s" repeatCount="indefinite"/></circle>`;
   }
+  let stars = '';
+  if (night) for (let i = 0; i < 14; i++) stars += `<circle cx="${(i * 37) % 396}" cy="${(i * 23) % 70}" r="${i % 3 ? .8 : 1.3}" fill="#dfe6ff" opacity="${.5 + (i % 3) * .2}"><animate attributeName="opacity" values=".9;.3;.9" dur="${2 + i % 3}s" repeatCount="indefinite"/></circle>`;
+  const tree = (x, y, sc) => `<g transform="translate(${x},${y}) scale(${sc})"><rect x="-1.5" y="0" width="3" height="6" fill="#3a2e22"/><polygon points="-8,0 8,0 0,-16" fill="${treeC}"/>${snowCap ? `<polygon points="-3.5,-10 3.5,-10 0,-16" fill="${snowCap}"/>` : ''}</g>`;
   return `<svg viewBox="0 0 400 225" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs>
-    <rect width="400" height="150" fill="url(#sky)"/>
-    ${night ? '<circle cx="330" cy="30" r="12" fill="#e8ecff" opacity=".9"/><circle cx="326" cy="28" r="12" fill="url(#sky)" opacity="0"/>' : ''}
-    ${snow ? '' : s.season === 0 ? '<circle cx="70" cy="26" r="9" fill="#ffe9a8" opacity=".95"/>' : ''}
-    <polygon points="0,150 90,96 170,140 260,88 340,138 400,110 400,150" fill="${snow ? '#5d6a9e' : '#3f4a76'}" opacity=".8"/>
-    <rect y="148" width="400" height="77" fill="${ground}"/>
-    <path d="M0,196 L400,188" stroke="${snow ? '#c9d4ea' : '#a8987a'}" stroke-width="6" fill="none" opacity=".7"/>
-    ${snow ? '<g fill="#fff"><circle cx="30" cy="168" r="3"/><circle cx="360" cy="182" r="4"/><circle cx="150" cy="186" r="2.5"/><circle cx="250" cy="170" r="3"/></g>' : '<g fill="#4a6a3e"><circle cx="30" cy="168" r="3"/><circle cx="360" cy="182" r="4"/><circle cx="150" cy="186" r="2.5"/><circle cx="250" cy="170" r="3"/></g>'}
+      <stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
+      <linearGradient id="gnd" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${ground}"/><stop offset="1" stop-color="${ground2}"/></linearGradient>
+    </defs>
+    <rect width="400" height="120" fill="url(#sky)"/>
+    ${night ? '<circle cx="330" cy="28" r="11" fill="#e8ecff" opacity=".92"/><circle cx="326" cy="25" r="11" fill="' + c1 + '" opacity=".55"/>' : s.season === 0 ? '<circle cx="70" cy="26" r="9" fill="#ffe9a8"/>' : ''}
+    ${stars}
+    <polygon points="0,120 70,66 140,108 230,58 320,104 400,72 400,120" fill="${snow ? '#57639e' : '#39466f'}" opacity=".9"/>
+    <polygon points="0,120 110,86 220,116 320,88 400,112 400,124 0,124" fill="${ground2}" opacity=".55"/>
+    <rect y="118" width="400" height="107" fill="url(#gnd)"/>
+    <path d="M150,225 Q200,196 185,168 Q170,140 195,118 L215,118 Q195,142 210,168 Q226,196 260,225 Z" fill="${snow ? '#b9c9e6' : '#00000022'}" opacity="${snow ? .8 : .5}"/>
+    ${tree(18, 168, 1.1)}${tree(48, 148, .8)}${tree(368, 158, 1)}${tree(352, 176, .75)}${tree(140, 132, .7)}${tree(262, 130, .7)}
     ${['greenhouse', 'workshop', 'keep', 'chapel', 'market', 'tavern', 'forge', 'manor', 'wall'].map(id => drawBld(id, s.bld[id], s)).join('')}
     ${vill}
   </svg>`;
@@ -436,7 +459,7 @@ function openChat(id) {
     </div>`;
   document.body.appendChild(el);
   const log = el.querySelector('#chatLog');
-  pushMsg('narr', `${c.name}과의 대화. 처음 듣는 말투, 처음 보는 눈빛.`);
+  pushMsg('narr', `${josa(c.name, '과', '와')}의 대화. 처음 듣는 말투, 처음 보는 눈빛.`);
   pushMsg('them', TRAITS[c.trait].talk.neutral[0]);
   renderChips();
   renderGifts();
@@ -1002,7 +1025,7 @@ function batEnd(win) {
     s.rep.bold++;
     addLog(`토벌 승리 (${BAT.enemy.name}) — ${msg}`);
     batLog(msg);
-    toast('⚔️ 승리! ' + msg, 'gold');
+    toast('⚔️ ' + msg, 'gold');
   } else {
     s.hp = 1;
     s.gold = Math.max(0, s.gold - 20);
@@ -1130,7 +1153,8 @@ function renderRoster() {
 
 function renderJournal() {
   const s = G.state;
-  const kids = s.children.map(c => `<div class="kv"><span>${c.sex === '딸' ? '👧' : '👦'} ${c.name || '(이름 없음)'} · ${c.hair} · ${c.stage === 'infant' ? '영아' : '유년'} · ${s.day - c.born}일째</span><b>${CHARS[c.mom].name}의 아이</b></div>`).join('');
+  const kids = s.children.map(c => `<div class="kv"><span>${c.sex === '딸' ? '👧' : '👦'} ${c.name || '(이름 없음)'} · ${c.hair} · ${c.stage === 'infant' ? '영아' : '유년'} · ${s.day - c.born}일째</span><b>${CHARS[c.mom].name}의 아이</b></div>
+      ${!c.name ? `<div class="row mt8"><input class="name-input" style="margin:0" placeholder="아이의 이름…" maxlength="8" id="childName_${c.id}"><button class="btn small primary" data-name="${c.id}">이름 지어주기</button></div>` : ''}`).join('');
   viewEl().innerHTML = `
     <div class="sect"><h3>영지 연대기</h3><span>${s.year}년차 · D+${s.day - s.startDay}</span></div>
     <div class="card" style="padding:12px 14px">
@@ -1152,6 +1176,17 @@ function renderJournal() {
       $('#noReset').addEventListener('click', closeModal);
     });
   });
+  viewEl().querySelectorAll('[data-name]').forEach(b => b.addEventListener('click', () => {
+    const c = s.children.find(x => x.id === b.dataset.name);
+    const inp = document.getElementById('childName_' + c.id);
+    const nm = inp && inp.value.trim();
+    if (!nm) { toast('이름을 적어 주세요.', 'bad'); return; }
+    c.name = nm;
+    addLog(`아이의 이름을 ${nm}(으)로 지었다.`);
+    toast(`👶 ${nm}(이)라고 지었다.`, 'gold');
+    SFX.play('level');
+    saveGame(); render();
+  }));
   bindCommon();
 }
 

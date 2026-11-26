@@ -418,7 +418,7 @@ function birthChild(momId) {
   };
   s.children.push(child);
   SFX.play('level');
-  milestone(sex === '딸' ? '👶 딸이 태어났다' : '👶 아들이 태어났다', `${mom.name}의 아이. ${hair}을 물려받았다. 이름을 지어줘야 한다.`);
+  milestone(sex === '딸' ? '👶 딸이 태어났다' : '👶 아들이 태어났다', `${mom.name}의 아이. ${hair}을 물려받았다. '기록' 탭에서 이름을 지어줄 수 있다.`);
 }
 
 function childStageOK(c) {

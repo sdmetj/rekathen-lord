@@ -44,12 +44,16 @@ function trustGain(char, intent, state) {
 }
 function affStage(aff) { return Math.min(10, Math.floor(aff / 100)); }
 
+function talkIdx(state, char, n) {
+  const base = state.day * 3 + state.phase + (state.aff[char.id] || 0);
+  return Math.abs(base) % n;
+}
 function affLineFor(char, intent, state) {
   const t = TRAITS[char.trait] || TRAITS.kuudere;
   const bank = t.talk || {};
   const arr = bank[intent];
-  if (arr && arr.length) return arr[(state.turn + (state.aff[char.id] || 0)) % arr.length];
-  return arr && arr.length ? arr[0] : (bank.neutral || ['…….'])[0];
+  if (arr && arr.length) return arr[talkIdx(state, char, arr.length)];
+  return (bank.neutral || ['…….'])[0];
 }
 
 /* ── 프리토크 응답 ─────────────────────────────────────────── */
@@ -109,7 +113,7 @@ function pickEarlyFlirt(char, state) {
     cynical: ['아직 정보가 부족해. 나중에 다시 팔아 봐.', '썩은 눈이군. 값도 안 나가.'],
   };
   const arr = low[char.trait] || ['…….'];
-  return arr[(state.turn + 3) % arr.length];
+  return arr[talkIdx(state, char, arr.length)];
 }
 
 /* ── 하트 이벤트 (핵심 인물) ───────────────────────────────── */
