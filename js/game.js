@@ -142,7 +142,7 @@ function apLeft() { return G.state.ap; }
 function phaseOf(apUsed) { return Math.min(2, Math.floor(apUsed / 2)); }
 function weather() {
   const s = G.state;
-  const list = SEASON_WEATHER[(s.season + 3) % 4];
+  const list = SEASON_WEATHER[s.season];
   return WEATHER[list[(s.day - 1) % list.length]];
 }
 function priceOf(id) {
