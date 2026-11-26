@@ -129,14 +129,7 @@ function hudHTML() {
 }
 
 function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-/* 받침 판별 조사 — josa(단어, 받침있을때, 받침없을때) */
-function josa(word, a, b) {
-  const s = String(word);
-  const last = s.charCodeAt(s.length - 1);
-  if (isNaN(last)) return s + b;
-  const fin = (last - 0xac00) % 28;
-  return s + (fin === 0 ? b : a);
-}
+/* josa는 game.js의 것을 쓴다 */
 
 function showHUD(on) { hudEl().classList.toggle('is-hidden', !on); }
 function showTabs(on) { tabEl().classList.toggle('is-hidden', !on); }
@@ -667,9 +660,9 @@ function openHeartEvent(charId, ev) {
       addLog(`[♡] ${c.name} — ${ev.title}: ${ch.t}`);
       SFX.play('heart');
       closeModal();
-      toast(`♡ ${c.name}과의 순간이 기록됐다`, 'good');
+      toast(`♡ ${josa(c.name, '과', '와')}의 순간이 기록됐다`, 'good');
       saveGame();
-      if (CHAT) { pushMsg('narr', `— ${ev.title} —`); pushMsg('them', ch.t, c.name); }
+      if (CHAT) { pushMsg('narr', `— ${ev.title} —`); pushMsg('narr', `당신의 선택: "${ch.t}"`); pushMsg('them', c.affinityLine || '…….', c.name); }
     }));
   });
 }
@@ -706,7 +699,7 @@ function openConfessSheet(charId) {
           addLog(`${CHARS[o].name}의 질투 — 호감도가 내려갔다.`);
         }, 900);
       }
-      toast(`♡ ${c.name}${k === 'wife' ? '와 혼인' : k === 'concubine' ? '를 별채에 들임' : '와 연인'}이 되었다`, 'gold');
+      toast(`♡ ${c.name}${k === 'wife' ? josa(c.name, '와', '와') + ' 혼인' : k === 'concubine' ? '를 별채에 들임' : josa(c.name, '과', '와') + ' 연인'}이 되었다`, 'gold');
       saveGame();
     }));
   });
@@ -768,6 +761,7 @@ function closeModal() {
   const root = document.getElementById('modal-root');
   root.classList.remove('open');
   setTimeout(() => { root.innerHTML = ''; root.className = 'modal-root'; }, 260);
+  setTimeout(() => { if (G.state && typeof nextMilestone === 'function') nextMilestone(); }, 320);
 }
 
 function openSheet(kind) { SFX.play('open'); SHEETS[kind](); }
@@ -913,7 +907,7 @@ function openHaggle(itemId) {
         s.gold += got;
         SFX.play('coin');
         toast(`${ITEMS[itemId].name} 판매 +${got}금`, 'gold');
-        addLog(`${ITEMS[itemId].name}을(를) ${got}금에 팔았다.`);
+        addLog(`${ITEMS[itemId].name}${josa(ITEMS[itemId].name, '을', '를')} ${got}금에 팔았다.`);
       } else {
         SFX.play('bad');
         toast('손님이 혀를 찬 채 나갔다…', 'bad');
@@ -1182,7 +1176,7 @@ function renderJournal() {
     const nm = inp && inp.value.trim();
     if (!nm) { toast('이름을 적어 주세요.', 'bad'); return; }
     c.name = nm;
-    addLog(`아이의 이름을 ${nm}(으)로 지었다.`);
+    addLog(`아이의 이름을 ${nm}${josa(nm, '으', '')}로 지었다.`);
     toast(`👶 ${nm}(이)라고 지었다.`, 'gold');
     SFX.play('level');
     saveGame(); render();

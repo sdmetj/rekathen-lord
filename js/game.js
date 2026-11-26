@@ -75,6 +75,15 @@ function toast(text, kind) {
   setTimeout(() => el.remove(), 2400);
 }
 
+/* 받침 판별 조사 — josa(단어, 받침있을때, 받침없을때) */
+function josa(word, a, b) {
+  const s = String(word);
+  const last = s.charCodeAt(s.length - 1);
+  if (isNaN(last)) return s + b;
+  const fin = (last - 0xac00) % 28;
+  return s + (fin === 0 ? b : a);
+}
+
 /* ── 성향 태그 ────────────────────────────────────────────── */
 const REP_LABEL = { warm: '다정함', bold: '호탕', cunning: '교활', mercy: '자비', loyal: '충의', cold: '냉혈' };
 function repTags(s) {
@@ -186,7 +195,7 @@ function doBuild(id) {
   s.bld[id]++;
   SFX.play('build');
   const b = BUILDINGS.find(x => x.id === id);
-  addLog(`${b.name}이(가) ${s.bld[id]}단계로 올라갔다.`);
+  addLog(`${josa(b.name, '이', '가')} ${s.bld[id]}단계로 올라갔다.`);
   milestone(`🏗 ${b.name} ${s.bld[id]}단계`, b.effect[Math.min(s.bld[id], b.max) - 1] || '영지가 자랐다.');
   saveGame();
   return true;
