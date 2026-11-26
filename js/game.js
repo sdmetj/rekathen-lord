@@ -147,10 +147,10 @@ function renderEstate() {
   if (!state.pending) pickEvent();
   const ev = state.pending;
   const art = ev.art && ev.art !== 'none' ? `<div class="scene ${ev.art === 'wolf' ? 'wolf' : ''}">
-      <span class="scene-tag">${ev.kicker}</span>
+      <span class="scene-tag">DAY ${String(state.day).padStart(2, '0')}</span>
       <img src="assets/${ev.art}.png" alt="">
       <span class="scene-line"></span>
-    </div>` : `<div class="scene none"><span class="scene-tag">${ev.kicker || '영지'}</span><span class="scene-line"></span></div>`;
+    </div>` : `<div class="scene none"><span class="scene-tag">DAY ${String(state.day).padStart(2, '0')}</span><span class="scene-line"></span></div>`;
 
   let body;
   if (state.pending.phase === 'result') {
