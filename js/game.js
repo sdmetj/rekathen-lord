@@ -42,6 +42,11 @@ function loadGame() {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || s.v !== 2) return null;
+    /* 과거 버그로 남은 더미 키 정리 */
+    delete s.aff.undefined; delete s.trust.undefined; delete s.mood.undefined;
+    delete s.rel.undefined; delete s.lastTalk.undefined; delete s.lastGift.undefined;
+    for (const k in s.items) if (!ITEMS[k]) delete s.items[k];
+    for (const k in (s.flags || {})) if (/_(undefined|null)$/.test(k)) delete s.flags[k];
     return s;
   } catch (e) { return null; }
 }

@@ -152,6 +152,7 @@ const MINOR_CHARS = [
 
 /* 총 54인: 핵심 13 + 변경 41 */
 const CHARS = Object.assign({}, CORE_CHARS, MINOR_CHARS.reduce((a, c) => (a[c.id] = c, a), {}));
+Object.keys(CHARS).forEach(k => { CHARS[k].id = k; });
 const CORE_IDS = Object.keys(CORE_CHARS);
 const ALL_IDS = Object.keys(CHARS);
 

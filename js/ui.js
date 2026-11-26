@@ -129,13 +129,13 @@ function hudHTML() {
 }
 
 function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-/* 받침 판별 조사 */
+/* 받침 판별 조사 — josa(단어, 받침있을때, 받침없을때) */
 function josa(word, a, b) {
   const s = String(word);
   const last = s.charCodeAt(s.length - 1);
-  if (isNaN(last)) return s + a;
+  if (isNaN(last)) return s + b;
   const fin = (last - 0xac00) % 28;
-  return s + (fin === 0 ? a : b);
+  return s + (fin === 0 ? b : a);
 }
 
 function showHUD(on) { hudEl().classList.toggle('is-hidden', !on); }
