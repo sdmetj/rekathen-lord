@@ -806,6 +806,21 @@ tabsEl.addEventListener('click', (e) => {
 });
 
 /* ── 시작 ─────────────────────────────── */
-state = null;
-renderTitle();
+/* QA-HOOK-START (배포 전 제거) */
+const qa = new URLSearchParams(location.search).get('qa');
+if (qa === 'ending') {
+  state = newState();
+  Object.assign(state, { day: 30, gold: 214, troops: 44, morale: 78, faith: 66 });
+  state.aff = { serena: 5, mira: 4 };
+  state.seen = {};
+  finish();
+} else if (qa === 'battle') {
+  state = newState();
+  state.day = 7;
+  startBattle({ battle: { name: '원뿔늑대 두목', hp: 54, atk: 10, art: 'wolf', boss: true, loot: { gold: 45, items: { pelt: 3, mana: 1 } } }, res: '숲이 조용해졌다.' }, { title: 'QA', kicker: 'QA' });
+} else {
+  state = null;
+  renderTitle();
+}
+/* QA-HOOK-END */
 })();
