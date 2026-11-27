@@ -6,7 +6,7 @@
 
 const SAVE_KEY = 'arden_save_v3';
 const SAVE_BAK  = 'arden_save_v3_bak';
-const ASSET_VER = 33;
+const ASSET_VER = 34;
 
 function newState(name) {
   return {
@@ -185,7 +185,11 @@ function applyEff(eff, opts) {
   if (eff.letter) addLetter(eff.letter, out);
   if (eff.appt) {
     const a = eff.appt;
-    if (!has('tilly')) {
+    if (!NIGHTS[a.who]) {
+      /* 밤 장면이 없는 인물 — 약속 대신 신뢰로 남긴다 */
+      s.trust[a.who] = Math.min(100, (s.trust[a.who] || 0) + 3);
+      add('🤝', `${ROSTER[a.who]?.name || a.who} 신뢰 +3`, 'up');
+    } else if (!has('tilly')) {
       add('⌛', '전령이 없어 약속을 잡지 못했다', 'down');
     } else {
       if (s.appt && s.appt.day > s.day && s.appt.who !== a.who) {

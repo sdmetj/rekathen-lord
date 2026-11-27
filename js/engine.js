@@ -31,7 +31,8 @@ const Game = {
     const s = S();
     return ACT1_EVENTS.find(e =>
       e.day === day && e.phase === phase && !s.seen[e.id] &&
-      (!e.cond || e.cond(s)));
+      (!e.cond || e.cond(s)) &&
+      !(e.id === 'a1_night' && s.appt && s.appt.day === day && s.appt.phase === 'night'));
   },
 
   scriptedEvent(id) { return ACT1_EVENTS.find(e => e.id === id); },
@@ -50,6 +51,8 @@ const Game = {
   /* ── 시간 ─────────────────────────────────────────────── */
   nextPhase() {
     const s = S();
+    const pending = this.eventDue(s.day, s.phase);
+    if (pending) { UI.openScene(pending); return; }
     if (s.phase === 'am') { s.phase = 'pm'; s.slots.pm = Math.max(s.slots.pm, 2); }
     else if (s.phase === 'pm') { s.phase = 'night'; s.slots.night = Math.max(s.slots.night, 1); }
     else { return this.endDay(); }
@@ -65,6 +68,8 @@ const Game = {
 
   endDay() {
     const s = S();
+    const pending = this.eventDue(s.day, s.phase);
+    if (pending) { UI.openScene(pending); return; }
     if (s.day === 15 && s.phase === 'night' && !s.done) {
       UI.toast('🌙', '오늘 밤을 지나칠 수 없다. 성벽 위의 불빛이 기다린다.');
       return;

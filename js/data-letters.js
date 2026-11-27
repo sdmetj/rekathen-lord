@@ -105,7 +105,7 @@ const LETTERS = [
   ],
   replies:[
     { tone:'near', t:'"올려 주게. 잠이 안 오는 건 사실이야."',
-      eff:{ trust:{hedwyn:6}, appt:{who:'hedwyn', place:'castle', inDays:1}, morale:1 },
+      eff:{ trust:{hedwyn:6}, morale:1 }, 
       res:[{n:'밤에 헤드윈이 책을 들고 온다. 표지에 손때가 많다. 여러 번 읽은 책이다.'}] },
     { tone:'far', t:'"책은 됐네. 열쇠나 찾아 주게."',
       eff:{ trust:{hedwyn:-2}, order:1 },
@@ -128,7 +128,7 @@ const LETTERS = [
   ],
   replies:[
     { tone:'near', t:'"약값은 제가 대겠습니다. 필요한 것을 적어 보내 주시오."',
-      eff:{ trust:{ansel:8}, gold:-10, faith:2, appt:{who:'ansel', place:'chapel', inDays:1} },
+      eff:{ trust:{ansel:8}, gold:-10, faith:2 },
       res:[{n:'안셀이 답장 대신 목록을 보낸다. 종이 아래에 "감사합니다" 대신 "오늘 기도에 넣었습니다"라고 적혀 있다.'}] },
     { tone:'far', t:'"기도만으로는 사람이 살지 않습니다."',
       eff:{ faith:1, trust:{ansel:-2}, rep:{cold:1} },
@@ -219,7 +219,7 @@ const LETTERS = [
   ],
   replies:[
     { tone:'near', t:'"고맙네. 계단은 세 칸씩 올라도 좋다."',
-      eff:{ trust:{tilly:8}, morale:2, appt:{who:'tilly', place:'castle', inDays:1} },
+      eff:{ trust:{tilly:8}, morale:2 },
       res:[{n:'다음 날 아침, 계단에서 발소리가 난다. 세 칸씩. 네 번 만에 도착한다.'}] },
     { tone:'far', t:'"주소 없는 편지는 열지 말고 보관하게."',
       eff:{ trust:{tilly:3}, order:2 },
@@ -419,7 +419,7 @@ const LETTERS = [
   ],
   replies:[
     { tone:'near', t:'"비어 있는 것이 사실입니다. 사람은 있지만, 이름은 아직."',
-      eff:{ faith:3, trust:{serena:4}, trust:{jerome:6}, flag:'jerome_ally' },
+      eff:{ faith:3, trust:{serena:4, jerome:6}, flag:'jerome_ally' },
       res:[{n:'그가 답장을 쓰지 않는다. 대신 명부의 빈 페이지를 한 장 찢어 보낸다. 아무 글자도 없는 종이.'}] },
     { tone:'far', t:'"추기경께 사실대로 적으시오."',
       eff:{ faith:6, morale:-2, flag:'jerome_truth' },
