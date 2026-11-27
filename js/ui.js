@@ -12,6 +12,9 @@ const tabEl = () => document.getElementById('tabbar');
    지금은 인물별 고유 작화(assets/{sprite}.png / {sprite}_portrait.png)를 쓴다.
    작화가 아직 없는 변경 인물은 성별이 맞는 base 작화를 그대로 공유한다. */
 const FaceCache = {};
+/* 작화를 교체할 때 브라우저가 예전 그림을 캐시해 두지 않도록 버전을 붙인다. */
+const ASSET_VER = '29';
+const av = p => `${p}?v=${ASSET_VER}`;
 
 /* base는 핵심 인물의 도트 이름일 수도, 다른 변경 인물의 id일 수도 있다.
    체인 끝까지 따라가 실제 도트(sprite)를 가진 인물을 찾아낸다. */
@@ -20,27 +23,27 @@ function spriteBaseOf(c) {
   while (cur && !cur.sprite && cur.base && guard++ < 10) cur = CHARS[cur.base];
   return (cur && cur.sprite) ? cur.sprite : null;
 }
-const IMG_FALLBACK = "onerror=\"this.onerror=null;this.src='assets/lord.png'\"";
+const IMG_FALLBACK = `onerror="this.onerror=null;this.src='assets/lord.png?v=${ASSET_VER}'"`;
 function faceSrc(id) {
   const c = CHARS[id];
-  if (!c) return 'assets/lord.png';
-  if (c.core) return `assets/${c.sprite}_portrait.png`;
+  if (!c) return av('assets/lord.png');
+  if (c.core) return av(`assets/${c.sprite}_portrait.png`);
   if (FaceCache[id]) return FaceCache[id];
   const sb = spriteBaseOf(c);
-  FaceCache[id] = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
+  FaceCache[id] = av(sb ? `assets/${sb}_portrait.png` : 'assets/lord.png');
   return FaceCache[id];
 }
 function spriteSrc(id) {
   const c = CHARS[id];
-  if (!c) return 'assets/lord.png';
-  if (c.core) return `assets/${c.sprite}.png`;
+  if (!c) return av('assets/lord.png');
+  if (c.core) return av(`assets/${c.sprite}.png`);
   const key = '_sp_' + id;
   if (FaceCache[key]) return FaceCache[key];
   const sb = spriteBaseOf(c);
-  FaceCache[key] = sb ? `assets/${sb}.png` : 'assets/lord.png';
+  FaceCache[key] = av(sb ? `assets/${sb}.png` : 'assets/lord.png');
   return FaceCache[key];
 }
-function bodyArt(id) { return 'assets/wolf.png'; }
+function bodyArt(id) { return av('assets/wolf.png'); }
 
 /* ── 공용 프래그먼트 ──────────────────────────────────────── */
 function heartsHTML(aff) {
