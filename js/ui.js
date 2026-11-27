@@ -623,7 +623,10 @@ const UI = {
       if (ch) return this.pickChoice(+ch.dataset.choice);
       const nl = e.target.closest('[data-night]');
       if (nl) return this.pickWinter(+nl.dataset.night);
-      if (!e.target.closest('.choices') && st.phase === 'lines') this.advanceLine();
+      if (!e.target.closest('.choices')) {
+        if (st.phase === 'lines') return this.advanceLine();
+        if (st.phase === 'result') return this.advanceResult();
+      }
     };
   },
 
