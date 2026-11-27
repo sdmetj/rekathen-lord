@@ -11,7 +11,7 @@ const tabEl = () => document.getElementById('tabbar');
    54인 전원이 자기 id의 고유 작화를 쓴다. 공유 base 폴백은 폐기했다.
    assets/{id}.png = 전신, assets/{id}_portrait.png = 초상. */
 /* 작화를 교체할 때 브라우저가 예전 그림을 캐시해 두지 않도록 버전을 붙인다. */
-const ASSET_VER = '31';
+const ASSET_VER = '32';
 const av = p => `${p}?v=${ASSET_VER}`;
 
 const IMG_FALLBACK = `onerror="this.onerror=null;this.src='assets/lord.png?v=${ASSET_VER}'"`;
@@ -442,8 +442,10 @@ function voiceLine(c, kind, s) {
   const bank = (typeof VOICE !== 'undefined') ? VOICE[c.id] : null;
   const arr = bank && bank[kind];
   if (arr && arr.length) {
-    const idx = Math.abs(s.day * 3 + s.phase + (s.aff[c.id] || 0) + kind.length) % arr.length;
-    return arr[idx];
+    /* 같은 대화 안에서 같은 대사가 두 번 나오지 않도록 턴을 섞는다 */
+    if (CHAT) CHAT.turn = (CHAT.turn || 0) + 1;
+    const seed = Math.abs(s.day * 3 + s.phase + (s.aff[c.id] || 0) + kind.length + (CHAT ? CHAT.turn : 0));
+    return arr[seed % arr.length];
   }
   const t = TRAITS[c.trait] || TRAITS.kuudere;
   const fall = { greet: t.talk.neutral, work: t.talk.work, praise: t.talk.praise,
