@@ -817,6 +817,8 @@ const UI = {
           <div class="e-list">
             <p>· ${wall}. ${doc}.</p>
             <p>· 마지막 줄은 아직 비어 있다. ${s.flags.edict ? '사흘의 시한은 끝났다.' : ''}</p>
+            <p>· 손에 넣은 것 — ${s.clues.slice(0, 4).map(id => CLUES[id]?.name).filter(Boolean).join(', ') || '아직 아무것도'}${s.clues.length > 4 ? ` 외 ${s.clues.length - 4}개` : ''}</p>
+            ${s.inf.length ? `<p>· 이은 추론 — ${s.inf.map(id => INFERENCES.find(x => x.id === id)?.title).filter(Boolean).join(', ')}</p>` : ''}
             <p>· 가장 가까운 사람 — ${top.map(id => ROSTER[id].name).join(', ') || '아무도 없다'}</p>
           </div>
           <p class="e-hook">"사람입니다. …사람이겠지요."</p>
