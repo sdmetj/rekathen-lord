@@ -289,6 +289,7 @@ const UI = {
     const met = s.met[id];
     this.openSheet(`
       <div class="char-sheet">
+        <button class="x char-x" data-close>✕</button>
         <div class="cs-art"><img src="assets/${id}_portrait.png?v=${ASSET_VER}" alt=""></div>
         <div class="cs-body">
           <p class="kicker">${c.role} · ${PLACES[c.place]?.name || ''}</p>
@@ -539,6 +540,7 @@ const UI = {
       <div class="place-head">
         <div class="ph-bg" style="background-image:url('assets/${P.bg}.png?v=${ASSET_VER}')"></div>
         <div class="ph-txt"><p class="kicker">${P.name}</p><h2>${P.desc}</h2></div>
+        <button class="x place-x" data-close>✕</button>
       </div>
       ${here.length ? `<div class="sect"><h3>이곳의 사람</h3><span>${here.length}</span></div><div class="pchars">${chars}</div>` : ''}
       <div class="sect"><h3>할 수 있는 일</h3><span>이번 ${PHASE_NAME[S().phase]} ${S().slots[S().phase] || 0}번</span></div>
@@ -548,13 +550,13 @@ const UI = {
     const sheet = $('#overlay .sheet');
     sheet.onclick = e => {
       const a = e.target.closest('[data-action]');
-      if (a) { if (Game.doAction(key, a.dataset.action)) this.closeSheet(); return; }
+      if (a) { const id = a.dataset.action; this.closeOverlay(); Game.doAction(key, id); return; }
       const b = e.target.closest('[data-buy]');
-      if (b) { Game.buy(b.dataset.buy, 1); this.closeSheet(); return; }
+      if (b) { const k = b.dataset.buy; this.closeOverlay(); Game.buy(k, 1); return; }
       const sl = e.target.closest('[data-sell]');
-      if (sl) { Game.sell(sl.dataset.sell, 1); this.closeSheet(); return; }
+      if (sl) { const k = sl.dataset.sell; this.closeOverlay(); Game.sell(k, 1); return; }
       const c = e.target.closest('[data-char]');
-      if (c) { this.closeSheet(); this.openChar(c.dataset.char); }
+      if (c) { const id = c.dataset.char; this.closeSheet(); this.openChar(id); }
     };
   },
 
