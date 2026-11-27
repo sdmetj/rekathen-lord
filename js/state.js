@@ -6,7 +6,7 @@
 
 const SAVE_KEY = 'arden_save_v3';
 const SAVE_BAK  = 'arden_save_v3_bak';
-const ASSET_VER = 41;
+const ASSET_VER = 42;
 
 function newState(name) {
   return {
@@ -219,7 +219,6 @@ function unlockChar(id, out) {
   const memo = ROSTER_MEMO[id];
   if (memo) s.hints[id] = memo;
   if (out) out.push({ icon:'🪪', text:`명부 — ${ROSTER[id].name}`, cls:'unlock' });
-  if (typeof toast === 'function') toast('🪪', `명부에 이름이 올랐습니다 — ${ROSTER[id].name}`);
 }
 
 function addLetter(id, out) {

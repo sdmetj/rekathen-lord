@@ -41,7 +41,11 @@ const Game = {
     const s = S();
     s.seen[ev.id] = 1;
     const apptTonight = s.appt && s.appt.day === s.day && s.appt.phase === s.phase && !s.done && ev.id !== 'a1_finale';
-    if (ev.unlock) ev.unlock.forEach(id => unlockChar(id));
+    if (ev.unlock) {
+      const uo = [];
+      ev.unlock.forEach(id => unlockChar(id, uo));
+      if (uo.length) setTimeout(() => UI.showEffToasts(uo), 450);
+    }
     if (ev.id === 'a1_letter1') { addLetter('L_serena_01'); s.tut.letters = false; }
     if (ev.id === 'a1_letter2') { addLetter('L_cardinal_01'); }
     if (ev.finale) { this.completeAct1(); return; }
@@ -132,8 +136,10 @@ const Game = {
   /* ── 해금 ─────────────────────────────────────────────── */
   checkUnlocks() {
     const s = S();
-    if (s.day >= 2 && !s.met.ansel) unlockChar('ansel');
-    if (s.flags.tavern_open && !s.met.brix) unlockChar('brix');
+    const uo = [];
+    if (s.day >= 2 && !s.met.ansel) unlockChar('ansel', uo);
+    if (s.flags.tavern_open && !s.met.brix) unlockChar('brix', uo);
+    uo.forEach(o => UI.toast(o.icon, `명부에 이름이 올랐습니다 — ${o.text.replace('명부 — ', '')}`));
   },
 
   /* ── 편지 ─────────────────────────────────────────────── */
