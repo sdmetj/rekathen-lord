@@ -43,7 +43,7 @@ bad = ctx.eval(r'''
       if (l.who && !ROSTER[l.who]) errs.push(e.id+' unknown who '+l.who);
       if (l.bg && !['bg_castle','bg_chapel','bg_forest','bg_shop','bg_tavern','bg_workshop'].includes(l.bg)) errs.push(e.id+' bad bg '+l.bg);
     });
-    if (e.dynamic !== 'winter_night' && !e.finale && (!e.choices || !e.choices.length)) errs.push(e.id+' no choices');
+    if (e.dynamic !== 'winter_night' && !e.finale && !e.letterAfter && (!e.choices || !e.choices.length)) errs.push(e.id+' no choices');
     (e.choices||[]).forEach(function(c){
       if (!c.label) errs.push(e.id+' choice no label');
       if (!c.res || !c.res.length) errs.push(e.id+' choice no res: '+c.label);

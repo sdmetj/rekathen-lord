@@ -6,6 +6,9 @@ const $  = (q, r) => (r || document).querySelector(q);
 const $$ = (q, r) => Array.from((r || document).querySelectorAll(q));
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
+/* {이름} — 대사·편지·선택지에서 영주 이름을 실제로 부른다 */
+const nm = t => String(t).replace(/\{이름\}/g, (S() && S().name) || '영주');
+
 const UI = {
   tab: 'today',
   sheet: null,
@@ -206,7 +209,7 @@ const UI = {
       <section class="day-head">
         <p class="kicker">${PHASE_ICON[s.phase]} ${PHASE_NAME[s.phase]} · 겨울 ${s.day}일</p>
         <h2>${s.done ? '겨울이 지나간다' : '빈 성의 겨울'}</h2>
-        <p class="ambient">${ev ? '아직 아무 일도 일어나지 않았다. …곧 일어날 것이다.' : ambient}</p>
+        <p class="ambient">${ev ? '아직 아무 일도 없다.' : ambient}</p>
       </section>
 
       ${ev ? `
@@ -305,7 +308,7 @@ const UI = {
         <div class="cs-body">
           <p class="kicker">${c.role} · ${PLACES[c.place]?.name || ''}</p>
           <h2>${c.name}</h2>
-          <p class="cs-line">"${line}"</p>
+          <p class="cs-line">"${esc(nm(line))}"</p>
           <div class="meter"><span>신뢰</span><i><b style="width:${t}%"></b></i><em>${t}</em></div>
           <div class="meter love"><span>호감</span><i><b style="width:${a / 10}%"></b></i><em>${Math.round(a / 10)}%</em></div>
           ${s.hints[id] ? `<p class="cs-memo">명부의 한 줄 — ${s.hints[id]}</p>` : ''}
@@ -325,13 +328,13 @@ const UI = {
       <section class="day-head">
         <p class="kicker">서신 · 하루 두 통의 답장</p>
         <h2>편지가 오는 밤</h2>
-        <p class="ambient">오늘 쓸 수 있는 답장 <b>${repliesLeft()}</b>통. 답장 한 줄이 다음 만남을 바꾼다.</p>
+        <p class="ambient">오늘 쓸 수 있는 답장 <b>${repliesLeft()}</b>통. 답장을 고르면 그 사람이 답한다.</p>
       </section>
       ${inbox.length ? inbox.map(L => `
         <button class="letter-row" data-letter="${L.id}">
           <span class="lr-wax">${L.wax === '교단' ? '†' : L.wax === '추기경' ? '††' : L.wax === '숲' ? '❖' : L.wax === '주점' ? '◉' : L.wax === '공방' ? '⚗' : '✦'}</span>
           <span class="lr-main"><em>${ROSTER[L.from]?.name || L.from}</em><b>${L.title}</b>
-          <i>${esc(L.body[1] || L.body[0]).slice(0, 46)}…</i></span>
+          <i>${esc(nm(L.body[1] || L.body[0])).slice(0, 46)}…</i></span>
           <span class="lr-new">새 편지</span>
         </button>`).join('') : `<div class="empty">답장하지 않은 편지가 없다. 밤이 지나면 새 편지가 온다.</div>`}
       ${done.length ? `<div class="sect"><h3>지난 서신</h3><span>${done.length}</span></div>
@@ -349,11 +352,11 @@ const UI = {
     const s = S(), L = LETTERS.find(l => l.id === id); if (!L) return;
     const replied = s.letters.replied[id] != null;
     const canReply = !replied && L.replies?.length && repliesLeft() > 0;
-    const body = L.body.map(p => `<p>${esc(p)}</p>`).join('');
+    const body = L.body.map(p => `<p>${esc(nm(p))}</p>`).join('');
     this.openOverlay(`
       <div class="letter-wrap">
         <div class="letter-paper">
-          <div class="lp-head"><span>${esc(L.title)}</span><i>${ROSTER[L.from]?.name || L.from}</i></div>
+          <div class="lp-head"><span>${esc(nm(L.title))}</span><i>${ROSTER[L.from]?.name || L.from}</i></div>
           <div class="lp-body">${body}</div>
           <div class="lp-seal">${L.wax === '교단' ? '†' : L.wax === '추기경' ? '††' : '✦'}</div>
         </div>
@@ -363,7 +366,7 @@ const UI = {
             ${L.replies.map((r, i) => `
               <button class="choice tone-${r.tone}" data-reply="${i}">
                 <span class="tone-mark">${r.tone === 'near' ? '가까이' : r.tone === 'far' ? '거리두기' : '장난'}</span>
-                <span class="choice-label">${esc(r.t)}</span>
+                <span class="choice-label">${esc(nm(r.t))}</span>
               </button>`).join('')}` :
             L.noReply ? `<button class="btn ghost" data-archive="${L.id}">읽고 보관한다</button>` :
             `<p class="hint center">오늘의 답장을 다 썼다. 내일 다시 쓰십시오.</p>`}
@@ -414,7 +417,7 @@ const UI = {
       <section class="day-head">
         <p class="kicker">단서 수첩</p>
         <h2>아는 것 <span>${s.clues.length}</span><small> / 12</small> · 추론 ${s.inf.length}</h2>
-        <p class="ambient">단서는 정보가 아니라, 물을 수 있는 권리다.</p>
+        <p class="ambient">단서를 얻으면, 그 사람에게 물을 수 있다.</p>
       </section>
       <div class="btabs">${tabs}</div>
       <div class="book-body">${body}</div>`;
@@ -624,7 +627,7 @@ const UI = {
         ${c ? `<div class="scene-stage"><img class="scene-char" src="assets/${st.who}_portrait.png?v=${ASSET_VER}" alt=""></div>` : `<div class="scene-stage empty"></div>`}
         <div class="scene-box ${l.n ? 'narr' : ''}">
           ${c ? `<div class="scene-who">${c.name}<em>${c.role}</em></div>` : ''}
-          <p class="scene-text">${esc(l.n || l.t || '')}</p>
+          <p class="scene-text">${esc(nm(l.n || l.t || ''))}</p>
           ${choices ? `<div class="choices">${choices}</div>` : (!showChoices ? `<span class="scene-next">▾</span>` : '')}
           ${st.phase === 'result' && isLast ? `<div class="choices"><button class="btn primary" data-next>계속</button></div>` : ''}
         </div>
@@ -666,8 +669,8 @@ const UI = {
       const pay = canPay(c.eff);
       return `<button class="choice tone-${c.tone || 'near'}" data-choice="${i}" ${pay ? '' : 'disabled'}>
       <span class="tone-mark">${c.tone === 'far' ? '거리두기' : c.tone === 'joke' ? '농담' : c.tone === 'bold' ? '결단' : c.tone === 'cold' ? '냉정' : '가까이'}</span>
-      <span class="choice-label">${esc(c.label)}</span>
-      ${c.sub ? `<span class="choice-sub">${esc(c.sub)}</span>` : ''}
+      <span class="choice-label">${esc(nm(c.label))}</span>
+      ${c.sub ? `<span class="choice-sub">${esc(nm(c.sub))}</span>` : ''}
       ${pay ? '' : '<span class="choice-sub need">자원이 모자란다</span>'}
     </button>`;
     }).join('');
