@@ -7,57 +7,11 @@ const viewEl = () => document.getElementById('view');
 const hudEl = () => document.getElementById('hud');
 const tabEl = () => document.getElementById('tabbar');
 
-/* ── 초상화 캐시 · 캔버스 색조 변형 ─────────────────────────── */
+/* ── 초상화 경로 캐시 ──────────────────────────────────────────
+   색조 변형(tint) 렌더링은 제거했다. 얼굴·눈이 깨져 보이던 원인이었고,
+   지금은 인물별 고유 작화(assets/{sprite}.png / {sprite}_portrait.png)를 쓴다.
+   작화가 아직 없는 변경 인물은 성별이 맞는 base 작화를 그대로 공유한다. */
 const FaceCache = {};
-function hslShift(r, g, b, dH, mS, dV) {
-  const mx = Math.max(r, g, b) / 255, mn = Math.min(r, g, b) / 255;
-  let h = 0, s = 0, l = (mx + mn) / 2;
-  if (mx !== mn) {
-    const d = mx - mn;
-    s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
-    if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0));
-    else if (mx === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-  }
-  h = (h + dH + 360) % 360;
-  s = Math.min(1, Math.max(0, s * mS));
-  l = Math.min(.97, Math.max(.03, l + dV));
-  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
-  let rr = 0, gg = 0, bb = 0;
-  if (h < 60) [rr, gg, bb] = [c, x, 0]; else if (h < 120) [rr, gg, bb] = [x, c, 0];
-  else if (h < 180) [rr, gg, bb] = [0, c, x]; else if (h < 240) [rr, gg, bb] = [0, x, c];
-  else if (h < 300) [rr, gg, bb] = [x, 0, c]; else [rr, gg, bb] = [c, 0, x];
-  return [Math.round((rr + m) * 255), Math.round((gg + m) * 255), Math.round((bb + m) * 255)];
-}
-
-function tintImage(src, tint, w, h) {
-  return new Promise(res => {
-    const img = new Image();
-    img.onload = () => {
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      const cx = cv.getContext('2d');
-      cx.drawImage(img, 0, 0, w, h);
-      const d = cx.getImageData(0, 0, w, h);
-      const p = d.data;
-      const [dH, mS, dV] = tint;
-      for (let i = 0; i < p.length; i += 4) {
-        if (p[i + 3] < 40) continue;
-        const mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]);
-        const sat = mx === 0 ? 0 : (mx - mn) / mx;
-        if (sat > .22 && mx / 255 < .97) {
-          const [r, g, b] = hslShift(p[i], p[i + 1], p[i + 2], dH, mS, dV);
-          p[i] = r; p[i + 1] = g; p[i + 2] = b;
-        }
-      }
-      cx.putImageData(d, 0, 0);
-      res(cv.toDataURL('image/png'));
-    };
-    img.onerror = () => res(src);
-    img.src = src;
-  });
-}
 
 /* base는 핵심 인물의 도트 이름일 수도, 다른 변경 인물의 id일 수도 있다.
    체인 끝까지 따라가 실제 도트(sprite)를 가진 인물을 찾아낸다. */
@@ -73,10 +27,8 @@ function faceSrc(id) {
   if (c.core) return `assets/${c.sprite}_portrait.png`;
   if (FaceCache[id]) return FaceCache[id];
   const sb = spriteBaseOf(c);
-  const load = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
-  FaceCache[id] = load;
-  tintImage(load, c.tint || [0, 1, 0], 200, 200).then(url => { FaceCache[id] = url; });
-  return load;
+  FaceCache[id] = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
+  return FaceCache[id];
 }
 function spriteSrc(id) {
   const c = CHARS[id];
@@ -85,10 +37,8 @@ function spriteSrc(id) {
   const key = '_sp_' + id;
   if (FaceCache[key]) return FaceCache[key];
   const sb = spriteBaseOf(c);
-  const load = sb ? `assets/${sb}.png` : 'assets/lord.png';
-  FaceCache[key] = load;
-  tintImage(load, c.tint || [0, 1, 0], 176, 240).then(url => { FaceCache[key] = url; });
-  return load;
+  FaceCache[key] = sb ? `assets/${sb}.png` : 'assets/lord.png';
+  return FaceCache[key];
 }
 function bodyArt(id) { return 'assets/wolf.png'; }
 
@@ -1290,23 +1240,13 @@ function render() {
 
 /* ── 부팅 ─────────────────────────────────────────────────── */
 function warmFaces() {
-  let pending = 0, done = 0;
+  /* 고유 작화 · base 작화를 미리 받아 둔다(중복 파일은 한 번만). */
+  const files = new Set();
   ALL_IDS.forEach(id => {
-    const c = CHARS[id];
-    if (c.core) return;
-    faceSrc(id);
-    const sb = spriteBaseOf(c);
-    const base = sb ? `assets/${sb}_portrait.png` : 'assets/lord.png';
-    const im = new Image();
-    pending++;
-    const finish = () => tintImage(base, c.tint || [0, 1, 0], 200, 200).then(url => {
-      FaceCache[id] = url;
-      if (++done === pending && G.state) render();
-    });
-    im.onload = finish;
-    im.onerror = finish;   /* 한 명 로드가 실패해도 나머지 렌더가 막히지 않게 */
-    im.src = base;
+    files.add(faceSrc(id));
+    files.add(spriteSrc(id));
   });
+  files.forEach(src => { const im = new Image(); im.src = src; });
 }
 window.addEventListener('load', () => {
   document.getElementById('boot').classList.add('gone');

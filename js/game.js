@@ -261,8 +261,8 @@ function endDay(sleepAtNight) {
       if (id === 'mira') s.gold += 14;
       if (id === 'claire') { if (s.items.herb) s.items.herb += 2; }
       if (id === 'seraphine') s.flags.spyNet = true;
-      if (id === 'ellen' || id === 'lana') s.troops += 1;
-      if (id === 'mill') s.morale = clamp(s.morale + 2, -100, 100);
+      if (id === 'ellen' || id === 'lana' || id === 'beloa') s.troops += 1;
+      if (id === 'mill' || id === 'rebe') s.morale = clamp(s.morale + 2, -100, 100);
     } else if (r === 'concubine') {
       if (id === 'mira') s.gold += 8;
       if (id === 'seraphine') s.flags.spyNet = true;
@@ -425,7 +425,7 @@ function birthChild(momId) {
   const s = G.state;
   const mom = CHARS[momId];
   const sex = Math.random() < 0.5 ? '딸' : '아들';
-  const hair = { serena: '백금발', mira: '적갈색 머리', claire: '은발', seraphine: '흑발', ellen: '백금발', lana: '적발', mill: '갈색 머리' }[momId] || '갈색 머리';
+  const hair = { serena: '백금발', mira: '적갈색 머리', claire: '은발', seraphine: '흑발', ellen: '백금발', lana: '적발', mill: '밝은 초록 머리', rebe: '푸른 머리', beloa: '은백발' }[momId] || '갈색 머리';
   const child = {
     id: 'c' + s.day, name: null, sex, mom: momId, born: s.day, stage: 'infant',
     hair, temp: TRAITS[mom.trait] ? TRAITS[mom.trait].name : '평온',

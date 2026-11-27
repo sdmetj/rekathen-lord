@@ -193,7 +193,8 @@ def cutout(src):
     arr = np.array(Image.open(src).convert("RGB"))
     bg = bg_colour(arr)
     rgb16 = arr.astype(np.int16)
-    magenta = (rgb16[:, :, 0] + rgb16[:, :, 2]) // 2 - rgb16[:, :, 1]
+    # 진짜 마젠타는 R·B가 함께 높다. 평균을 쓰면 진홍(적발)·주황이 마젠타로 오인돼 사라진다.
+    magenta = np.minimum(rgb16[:, :, 0], rgb16[:, :, 2]) - rgb16[:, :, 1]
     dist_bg = np.sqrt(((rgb16 - bg) ** 2).sum(axis=2))
 
     opaque = ~border_flood((dist_bg < BG_TOL) | (magenta > 90))
@@ -208,13 +209,15 @@ def cutout(src):
 
 
 def process_sprite(src, dst, target=(176, 240), outline=True, align="bottom", colors=32, scale=4,
-                   color=1.14, contrast=1.06, top_bias=0.0):
+                   color=1.14, contrast=1.06, bright=1.0, top_bias=0.0):
     img, alpha = cutout(src)
     bbox = alpha.getbbox()
     if bbox:
         img, alpha = img.crop(bbox), alpha.crop(bbox)
     img = ImageEnhance.Color(img).enhance(color)
     img = ImageEnhance.Contrast(img).enhance(contrast)
+    if bright != 1.0:
+        img = ImageEnhance.Brightness(img).enhance(bright)
 
     w, h = img.size
     tw, th = target
@@ -255,6 +258,10 @@ def main():
     ap.add_argument("mode", nargs="?", default="all", choices=["all", "sprites", "portraits", "scenes"])
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--only", default="")
+    # 초상화 톤 — 파스텔 모던 도트 기준(var2): 채도·대비를 낮게, 밝기는 살짝 올린다.
+    ap.add_argument("--pcolor", type=float, default=1.10)
+    ap.add_argument("--pcontrast", type=float, default=1.04)
+    ap.add_argument("--pbright", type=float, default=1.05)
     args = ap.parse_args()
     base = Path(args.root)
     raw = base / "assets" / "raw"
@@ -282,7 +289,7 @@ def main():
                 print("skip", src)
                 continue
             process_sprite(src, out / dst, target=(240, 240), outline=False, align="center", scale=3,
-                           colors=48, color=1.26, contrast=1.14)
+                           colors=48, color=args.pcolor, contrast=args.pcontrast, bright=args.pbright)
             print(f"assets/{dst}  {Image.open(out / dst).size}")
     if args.mode in ("all", "scenes"):
         for name, dst in SCENES:
