@@ -40,12 +40,14 @@ const Game = {
   finishEvent(ev) {
     const s = S();
     s.seen[ev.id] = 1;
+    const apptTonight = s.appt && s.appt.day === s.day && s.appt.phase === s.phase && !s.done && ev.id !== 'a1_finale';
     if (ev.unlock) ev.unlock.forEach(id => unlockChar(id));
     if (ev.id === 'a1_letter1') { addLetter('L_serena_01'); s.tut.letters = false; }
     if (ev.id === 'a1_letter2') { addLetter('L_cardinal_01'); }
     if (ev.finale) { this.completeAct1(); return; }
-    /* 사건이 끝나면 명부·목표를 다시 그린다 */
+    /* 사건이 끝나면 명부·목표를 다시 그린다. 오늘 밤 약속이 남아 있으면 이어서 연다. */
     State.save(); UI.render();
+    if (apptTonight) setTimeout(() => { if (S().appt) Game.keepAppointment(); }, 480);
   },
 
   /* ── 시간 ─────────────────────────────────────────────── */
@@ -184,7 +186,7 @@ const Game = {
     const c = A.cost || {};
     if (c.gold && s.gold < c.gold) { UI.toast('🪙', '금화가 모자란다.'); return false; }
     for (const k of Object.keys(GOODS)) {
-      if (c[k] && (s.items[k] || 0) < c[k]) { UI.toast(GOODS[k].icon, `${GOODS[k].name}이(가) 모자란다.`); return false; }
+      if (c[k] && (s.items[k] || 0) < c[k]) { UI.toast(GOODS[k].icon, `${GOODS[k].name} 부족.`); return false; }
     }
     if (c.gold) s.gold -= c.gold;
     for (const k of Object.keys(GOODS)) if (c[k]) s.items[k] = Math.max(0, (s.items[k] || 0) - c[k]);
@@ -226,7 +228,7 @@ const Game = {
     if (s.gold < (c.gold || 0)) { UI.toast('🪙', `금화가 모자란다 (${c.gold}G 필요)`); return false; }
     for (const [k, n] of Object.entries(c)) {
       if (k === 'gold') continue;
-      if ((s.items[k] || 0) < n) { UI.toast(GOODS[k]?.icon || '📦', `${GOODS[k]?.name || k}이(가) 모자란다 (${n}개 필요)`); return false; }
+      if ((s.items[k] || 0) < n) { UI.toast(GOODS[k]?.icon || '📦', `${GOODS[k]?.name || k} 부족 (${n}개 필요)`); return false; }
     }
     if (!this.canSpendSlot()) { UI.toast('⌛', '이번 시간에 할 수 있는 일을 다 했다.'); return false; }
     s.gold -= c.gold || 0;
@@ -280,8 +282,8 @@ const Game = {
     const req = E.req || {};
     for (const [k, n] of Object.entries(req)) {
       if (k === 'gold' && s.gold < n) return UI.toast('🪙', '금화가 모자란다.');
-      if (['food','troops'].includes(k) && s[k] < n) return UI.toast('⚠️', `${EFF_LABEL[k]?.[0] || k}이(가) 모자란다.`);
-      if (GOODS[k] && (s.items[k] || 0) < n) return UI.toast(GOODS[k].icon, `${GOODS[k].name}이(가) ${n}개 필요하다.`);
+      if (['food','troops'].includes(k) && s[k] < n) return UI.toast('⚠️', `${EFF_LABEL[k]?.[0] || k} 부족.`);
+      if (GOODS[k] && (s.items[k] || 0) < n) return UI.toast(GOODS[k].icon, `${GOODS[k].name} ${n}개 필요.`);
     }
     for (const [k, n] of Object.entries(req)) {
       if (k === 'gold') s.gold -= n;

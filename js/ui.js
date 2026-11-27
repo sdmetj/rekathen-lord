@@ -211,7 +211,7 @@ const UI = {
 
       ${appt ? `
       <button class="appt-card" data-appt="1">
-        <span class="a-ico">🕯</span>
+        <span class="a-ico">◈</span>
         <span><em>오늘의 약속</em><b>${ROSTER[appt.who].name} · ${PLACES[appt.place].name}</b></span>
         <span class="a-go">지키러 간다 ›</span>
       </button>` : ''}
@@ -317,7 +317,7 @@ const UI = {
       </section>
       ${inbox.length ? inbox.map(L => `
         <button class="letter-row" data-letter="${L.id}">
-          <span class="lr-wax">${L.wax === '교단' ? '✝' : L.wax === '추기경' ? '✝✝' : L.wax === '숲' ? '🌲' : L.wax === '주점' ? '🍺' : L.wax === '공방' ? '⚗' : '✦'}</span>
+          <span class="lr-wax">${L.wax === '교단' ? '†' : L.wax === '추기경' ? '††' : L.wax === '숲' ? '❖' : L.wax === '주점' ? '◉' : L.wax === '공방' ? '⚗' : '✦'}</span>
           <span class="lr-main"><em>${ROSTER[L.from]?.name || L.from}</em><b>${L.title}</b>
           <i>${esc(L.body[1] || L.body[0]).slice(0, 46)}…</i></span>
           <span class="lr-new">새 편지</span>
@@ -343,7 +343,7 @@ const UI = {
         <div class="letter-paper">
           <div class="lp-head"><span>${esc(L.title)}</span><i>${ROSTER[L.from]?.name || L.from}</i></div>
           <div class="lp-body">${body}</div>
-          <div class="lp-seal">${L.wax === '교단' ? '✝' : L.wax === '추기경' ? '✝✝' : '✦'}</div>
+          <div class="lp-seal">${L.wax === '교단' ? '†' : L.wax === '추기경' ? '††' : '✦'}</div>
         </div>
         <div class="letter-actions">
           ${replied ? `<p class="hint center">이미 답장했다. ${s.letters.replied[id] >= 0 ? '' : ''}</p>` :
@@ -401,7 +401,7 @@ const UI = {
     v.innerHTML = `
       <section class="day-head">
         <p class="kicker">단서 수첩</p>
-        <h2>아는 것 <span>${s.clues.length}</span><small>/ 12</small> · 추론 ${s.inf.length}</h2>
+        <h2>아는 것 <span>${s.clues.length}</span><small> / 12</small> · 추론 ${s.inf.length}</h2>
         <p class="ambient">단서는 정보가 아니라, 물을 수 있는 권리다.</p>
       </section>
       <div class="btabs">${tabs}</div>

@@ -432,3 +432,5 @@ body.ovl{overflow:hidden}
 .t-char{height:34vh}
 .t-char.kael{height:30vh}
 .t-char.greta{height:29vh}
+.a-ico{width:22px;height:22px;flex:none;display:grid;place-items:center;font-size:14px;color:var(--gold)}
+.hud{padding-top:calc(12px + var(--safe-t))}
