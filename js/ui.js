@@ -63,6 +63,17 @@ const UI = {
 
   newGame() {
     const name = ($('#tName')?.value || '').trim() || '아르덴 영주';
+    const old = State.load();
+    if (old) {
+      this.openSheet(`
+        <div class="sheet-head"><h2>새로 시작</h2><button class="x" data-close>✕</button></div>
+        <p class="flavor">겨울 ${old.day}일의 기록이 있습니다. 새로 시작하면 그 기록을 덮어씁니다.</p>
+        <p class="hint">남기고 싶다면 먼저 '기록 내보내기'로 코드를 복사해 두십시오.</p>
+        <button class="btn primary" id="newGo">기존 기록을 덮고 시작한다</button>
+        <button class="btn ghost" data-close>취소</button>`);
+      $('#newGo').onclick = () => { this.closeOverlay(); this.hideTitle(); Game.newGame(name); };
+      return;
+    }
     this.hideTitle();
     Game.newGame(name);
   },

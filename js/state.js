@@ -6,7 +6,7 @@
 
 const SAVE_KEY = 'arden_save_v3';
 const SAVE_BAK  = 'arden_save_v3_bak';
-const ASSET_VER = 40;
+const ASSET_VER = 41;
 
 function newState(name) {
   return {
