@@ -10,6 +10,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css?v=33">
+<script>
+/* QA 계측 — 콘솔/이미지 오류 0건 확인용 (게임 로직에는 관여하지 않음) */
+window.__errs=[]; window.__imgerrs=[];
+addEventListener('error', function(e){
+  if (e.target && e.target.tagName==='IMG') { window.__imgerrs.push(e.target.getAttribute('src')); return; }
+  window.__errs.push(String(e.message||e.error||'error'));
+}, true);
+addEventListener('unhandledrejection', function(e){ window.__errs.push('promise:'+String(e.reason)); });
+(function(){ var ce=console.error; console.error=function(){ window.__errs.push('console:'+Array.prototype.join.call(arguments,' ')); ce.apply(console,arguments); }; })();
+</script>
 </head>
 <body>
 <div id="app">
