@@ -99,6 +99,7 @@ const bld = k => S().bld[k] || 0;
 function isBuilt(k) {
   if (k === 'market2') return (S().bld.market || 0) >= 2;
   if (k === 'tavern2') return !!S().bld.tavern;
+  if (k === 'chapel') return !!S().flags.chapel_fixed;
   return !!S().bld[k];
 }
 const tagHeat = k => Math.max(0, Math.min(6, S().tags[k] || 0));

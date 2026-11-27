@@ -229,6 +229,7 @@ const Game = {
     s.bld[key === 'market2' ? 'market' : key === 'tavern2' ? 'tavern' : key] = key === 'market2' ? 2 : 1;
     s.slots[s.phase] -= 1;
     s.flags['built_' + key] = 1;
+    if (key === 'chapel') s.flags.chapel_fixed = 1;
     State.save(); UI.render();
     UI.toast(B.icon, `${B.name} 완공`);
     return true;

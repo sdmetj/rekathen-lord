@@ -218,7 +218,7 @@ const UI = {
 
       <div class="goal-row">${goalHtml}</div>
 
-      <div class="sect"><h3>영지의 장소</h3><span>${slotLeft()}번의 행동이 남았다</span></div>
+      <div class="sect"><h3>영지의 장소</h3><span>${PHASE_NAME[s.phase]}에 ${s.slots[s.phase] || 0}번 남았다</span></div>
       <div class="places">${partners}</div>
 
       <div class="row gap" style="margin:16px 0 6px">
@@ -258,7 +258,7 @@ const UI = {
       return `<button class="rcell ${on ? 'on' : 'locked'}" data-char="${on ? id : ''}" data-lock="${on ? '' : id}">
         ${on ? `<img src="assets/${id}_portrait.png?v=${ASSET_VER}" alt="">` : `<span class="sil">?</span>`}
         <b>${on ? c.name : '???'}</b>
-        <i>${on ? c.role : c.role.split(' ')[0]}</i>
+        <i>${c.role}</i>
         ${on && c.tier !== '조연' ? `<em class="tier">${c.tier}</em>` : ''}
       </button>`;
     }).join('');
@@ -541,7 +541,7 @@ const UI = {
         <div class="ph-txt"><p class="kicker">${P.name}</p><h2>${P.desc}</h2></div>
       </div>
       ${here.length ? `<div class="sect"><h3>이곳의 사람</h3><span>${here.length}</span></div><div class="pchars">${chars}</div>` : ''}
-      <div class="sect"><h3>할 수 있는 일</h3><span>${slotLeft()}번 남음</span></div>
+      <div class="sect"><h3>할 수 있는 일</h3><span>이번 ${PHASE_NAME[S().phase]} ${S().slots[S().phase] || 0}번</span></div>
       <div class="acts">${acts}</div>
       ${goods ? `<div class="sect"><h3>상회 — 사고팔기</h3><span>1회 = 행동 1</span></div><div class="goods">${goods}</div>` : ''}
     `);
@@ -605,18 +605,19 @@ const UI = {
         <div class="scene-veil"></div>
         <div class="scene-top">
           <span class="kicker">${esc(st.ev.kicker || '')}</span>
+          ${st.phase === 'lines' && st.i < st.lines.length - 1 ? `<button class="icon-btn ghost" data-fast title="선택지까지">≫</button>` : ''}
         </div>
         ${c ? `<div class="scene-stage"><img class="scene-char" src="assets/${st.who}_portrait.png?v=${ASSET_VER}" alt=""></div>` : `<div class="scene-stage empty"></div>`}
         <div class="scene-box ${l.n ? 'narr' : ''}">
           ${c ? `<div class="scene-who">${c.name}<em>${c.role}</em></div>` : ''}
           <p class="scene-text">${esc(l.n || l.t || '')}</p>
           ${choices ? `<div class="choices">${choices}</div>` : (!showChoices ? `<span class="scene-next">▾</span>` : '')}
-          ${st.phase === 'result' ? `<div class="choices"><button class="btn primary" data-next>계속</button></div>` : ''}
+          ${st.phase === 'result' && isLast ? `<div class="choices"><button class="btn primary" data-next>계속</button></div>` : ''}
         </div>
       </div>`);
     const sc = $('.scene');
     sc.onclick = e => {
-      if (e.target.closest('[data-skip]')) { this.scene = null; this.closeOverlay(); Game.finishEvent(st.ev); return; }
+      if (e.target.closest('[data-fast]')) { st.i = st.lines.length - 1; return this.renderScene(); }
       if (e.target.closest('[data-next]')) return this.advanceResult();
       const ch = e.target.closest('[data-choice]');
       if (ch) return this.pickChoice(+ch.dataset.choice);

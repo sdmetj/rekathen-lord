@@ -426,3 +426,9 @@ body.ovl{overflow:hidden}
 .choice:disabled{opacity:.45;pointer-events:none}
 .choice-sub.need{color:var(--rose)}
 .title-screen{position:fixed;inset:0;z-index:30;max-width:520px;margin:0 auto;background:#05070d;overflow:hidden}
+.toast-root{top:calc(56px + var(--safe-t));bottom:auto}
+.t-inner{background:linear-gradient(180deg,transparent,rgba(5,7,13,.9) 24%,#05070d 58%);padding-top:34px}
+.t-stage{bottom:38%}
+.t-char{height:34vh}
+.t-char.kael{height:30vh}
+.t-char.greta{height:29vh}
