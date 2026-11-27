@@ -684,7 +684,7 @@ const ACT1_EVENTS = [
     {n:'촛불이 흔들린다. 이 종이를 어떻게 할지, 지금 정해야 한다.'},
   ],
   choices:[
-    { label:'태운다', sub:'교단 신뢰 +10 · 단서 소멸', tone:'cold',
+    { label:'태운다', sub:'교단 신뢰 +10 · 기록을 지운다', tone:'cold',
       eff:{ faith:6, trust:{serena:4}, flag:'final_burn', rep:{loyal:1} },
       res:[{n:'촛불에 종이를 겹쳐 든다. 두 장이 함께 탄다. 빈 줄이 먼저 탄다.'},
            {who:'serena', t:'…이제 아무것도 남지 않았습니다.'},

@@ -698,7 +698,7 @@ const UI = {
       this.closeOverlay(); this.scene = null; Game.finishEvent(st.ev); return;
     }
     st.bg = scn.bg; st.lines = scn.lines; st.i = 0; st.phase = 'lines'; st.who = null;
-    st.ev = Object.assign({}, st.ev, { kicker: '겨울 · 15일 · 밤' });
+    st.ev = Object.assign({}, st.ev, { kicker: '겨울 · 15일 · 밤', choices: [], dynamic: null });
     this.renderScene();
   },
 
