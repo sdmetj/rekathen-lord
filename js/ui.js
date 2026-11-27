@@ -1,1273 +1,924 @@
 /* ══════════════════════════════════════════════════════════════
-   렌더 · UI — 모바일 퍼스트 모던 인디 UI
+   UI — 화면 · 장면 · 편지 · 단서 수첩
    ══════════════════════════════════════════════════════════════ */
 
-const $ = sel => document.querySelector(sel);
-const viewEl = () => document.getElementById('view');
-const hudEl = () => document.getElementById('hud');
-const tabEl = () => document.getElementById('tabbar');
+const $  = (q, r) => (r || document).querySelector(q);
+const $$ = (q, r) => Array.from((r || document).querySelectorAll(q));
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
-/* ── 초상화 경로 ──────────────────────────────────────────────
-   54인 전원이 자기 id의 고유 작화를 쓴다. 공유 base 폴백은 폐기했다.
-   assets/{id}.png = 전신, assets/{id}_portrait.png = 초상. */
-/* 작화를 교체할 때 브라우저가 예전 그림을 캐시해 두지 않도록 버전을 붙인다. */
-const ASSET_VER = '32';
-const av = p => `${p}?v=${ASSET_VER}`;
+const UI = {
+  tab: 'today',
+  sheet: null,
+  scene: null,
+  bookTab: 'doc',
+  linkSel: [],
 
-const IMG_FALLBACK = `onerror="this.onerror=null;this.src='assets/lord.png?v=${ASSET_VER}'"`;
-function faceSrc(id) {
-  const c = CHARS[id];
-  return av(c ? `assets/${c.id}_portrait.png` : 'assets/lord.png');
-}
-function spriteSrc(id) {
-  const c = CHARS[id];
-  return av(c ? `assets/${c.id}.png` : 'assets/lord.png');
-}
-function bodyArt(id) { return av('assets/wolf.png'); }
+  /* ══ 기본 ══════════════════════════════════════════════ */
+  boot() {
+    this.renderTitle();
+  },
 
-/* ── 공용 프래그먼트 ──────────────────────────────────────── */
-function heartsHTML(aff) {
-  const st = affStage(aff);
-  let h = '';
-  for (let i = 0; i < 10; i++) h += `<i class="${i < st ? 'on' : ''}">♥</i>`;
-  return `<span class="hearts">${h}</span>`;
-}
-
-function hudHTML() {
-  const s = G.state;
-  const w = weather();
-  const am = apMax();
-  let pips = '';
-  for (let i = 0; i < am; i++) pips += `<span class="ap-pip ${i < s.ap ? 'on' : 'used'}"></span>`;
-  const tags = repTags(s).map(t => `<span class="tag">${t}</span>`).join('');
-  return `
-  <div class="hud-row hud-top">
-    <div class="fief">
-      <em>ARDEN MARCH</em>
-      <b>${esc(s.name)}의 아르덴 <span style="color:var(--dim2);font-weight:500">· ${SEASON_ICON[s.season]} ${SEASONS[s.season]}</span></b>
-    </div>
-    <div class="hud-date">
-      <div class="chip-date"><b>${s.year}년차 ${s.dayOfSeason}일</b><span>${w.icon} ${w.name}</span></div>
-      <button class="chip-date" id="guideBtn" style="font-size:12px;padding:6px 9px">? 가이드</button>
-      <button class="chip-date" id="muteBtn" style="font-size:14px">${SFX.isMuted() ? '🔇' : '🔊'}</button>
-    </div>
-  </div>
-  <div class="hud-row hud-mid">
-    <div class="ap"><span class="ap-label">행동력</span>${pips}<span class="phase-pill">${PHASES[s.phase]}</span></div>
-    <div style="display:flex;gap:5px;align-items:center">${tags}
-      <button class="btn small ghost" id="sleepBtn" style="padding:5px 10px">🛏 하루 마감</button>
-    </div>
-  </div>
-  <div class="res-row">
-    <span class="res gold"><i>💰</i><b>${s.gold}</b></span>
-    <span class="res morale"><i>😊</i><b>${s.morale}</b></span>
-    <span class="res troops"><i>🛡</i><b>${s.troops}</b></span>
-    <span class="res faith"><i>✝</i><b>${s.faith}</b></span>
-    <span class="res"><i>❤️</i><b>${s.hp}</b></span>
-  </div>`;
-}
-
-function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-/* josa는 game.js의 것을 쓴다 */
-
-function showHUD(on) { hudEl().classList.toggle('is-hidden', !on); }
-function showTabs(on) { tabEl().classList.toggle('is-hidden', !on); }
-
-/* ── 영지 지도 SVG ─────────────────────────────────────────── */
-function bldPos(id) {
-  /* [x, baseline y] — 낮은 y가 멀리, 높은 y가 앞줄 */
-  return {
-    keep: [200, 128], wall: [200, 204], market: [92, 150], chapel: [318, 142],
-    workshop: [330, 106], tavern: [80, 182], greenhouse: [84, 106], forge: [316, 180], manor: [200, 170],
-  }[id];
-}
-function drawBld(id, lv, s) {
-  const [x, y] = bldPos(id);
-  const b = BUILDINGS.find(x2 => x2.id === id);
-  const night = s.phase === 2;
-  const lit = night ? '#ffd88a' : '#b7c3e8';
-  let body = '';
-  if (lv === 0) {
-    body = `<g opacity=".85">
-      <rect x="${x - 16}" y="${y - 14}" width="32" height="14" rx="2" fill="rgba(30,38,66,.55)" stroke="rgba(200,210,255,.4)" stroke-dasharray="3 3" stroke-width="1"/>
-      <text x="${x}" y="${y + 6}" text-anchor="middle" font-size="7.5" fill="rgba(225,232,255,.75)" font-family="sans-serif">${b.icon} ${b.name}</text>
-    </g>`;
-  } else {
-    const h = 13 + lv * 5, w2 = 24 + lv * 5;
-    const wallC = ['#8a6a4a', '#8a6a4a', '#95a1cc', '#a9b5e4'][lv];
-    const roofC = ['#5f4630', '#5f4630', '#59619c', '#675cc4'][lv];
-    body = `<g>
-      <ellipse cx="${x}" cy="${y}" rx="${w2 / 2 + 5}" ry="3" fill="rgba(10,12,24,.35)"/>
-      <rect x="${x - w2 / 2}" y="${y - h}" width="${w2}" height="${h}" rx="2" fill="${wallC}"/>
-      <polygon points="${x - w2 / 2 - 4},${y - h} ${x + w2 / 2 + 4},${y - h} ${x},${y - h - 10 - lv * 2}" fill="${roofC}"/>
-      <rect x="${x - 3}" y="${y - h + 4}" width="6" height="6" rx="1" fill="${lit}" opacity="${night ? 1 : .8}"/>
-      ${lv >= 2 ? `<rect x="${x - w2 / 2 + 3}" y="${y - 6}" width="4" height="6" rx="1" fill="${lit}" opacity=".7"/><rect x="${x + w2 / 2 - 7}" y="${y - 6}" width="4" height="6" rx="1" fill="${lit}" opacity=".7"/>` : ''}
-      ${lv >= 3 ? `<line x1="${x}" y1="${y - h - 10 - lv * 2}" x2="${x}" y2="${y - h - 22}" stroke="#d9def7" stroke-width="1"/><polygon points="${x},${y - h - 22} ${x + 9},${y - h - 18.5} ${x},${y - h - 15}" fill="#ff8fa8"/>` : ''}
-      <text x="${x}" y="${y + 9}" text-anchor="middle" font-size="7.5" fill="${night ? 'rgba(255,235,200,.8)' : 'rgba(25,30,55,.75)'}" font-family="sans-serif">${b.name} ${lv >= 2 ? 'Ⅲ' : lv === 2 ? 'Ⅱ' : ''}</text>
-    </g>`;
-  }
-  return body;
-}
-
-function territorySVG() {
-  const s = G.state;
-  const w = weather();
-  const night = s.phase === 2;
-  const skies = {
-    0: ['#1c2440', '#3a4a7a'], 1: ['#4a3a5e', '#8a5a7a'], 2: ['#0a0e1e', '#1c2440'],
-    3: ['#232c4e', '#46568e'],
-  };
-  const [c1, c2] = night ? skies[2] : s.season === 3 ? skies[0] : s.season === 0 ? ['#3a4a7a', '#7a9ac9'] : s.season === 1 ? skies[1] : skies[3];
-  const snow = s.season === 3;
-  const ground = snow ? '#dfe8f6' : s.season === 0 ? '#7fae6c' : s.season === 1 ? '#6fa25e' : '#b99a5e';
-  const ground2 = snow ? '#c6d5ee' : s.season === 0 ? '#6e9c5c' : s.season === 1 ? '#5f904f' : '#a5854c';
-  const treeC = snow ? '#2c3a5e' : '#3f6a3c';
-  const snowCap = snow ? '#e8eefb' : '';
-  const villagerN = Math.max(0, Math.min(7, Math.round((s.morale + 100) / 40) + (s.bld.tavern ? 1 : 0)));
-  let vill = '';
-  for (let i = 0; i < villagerN; i++) {
-    vill += `<circle cx="${30 + i * 50}" cy="${200 + (i % 2) * 5}" r="2.6" fill="${night ? '#ffd88a' : '#2c3560'}"><animate attributeName="opacity" values="1;.45;1" dur="${2 + i * .4}s" repeatCount="indefinite"/></circle>`;
-  }
-  let stars = '';
-  if (night) for (let i = 0; i < 14; i++) stars += `<circle cx="${(i * 37) % 396}" cy="${(i * 23) % 70}" r="${i % 3 ? .8 : 1.3}" fill="#dfe6ff" opacity="${.5 + (i % 3) * .2}"><animate attributeName="opacity" values=".9;.3;.9" dur="${2 + i % 3}s" repeatCount="indefinite"/></circle>`;
-  const tree = (x, y, sc) => `<g transform="translate(${x},${y}) scale(${sc})"><rect x="-1.5" y="0" width="3" height="6" fill="#3a2e22"/><polygon points="-8,0 8,0 0,-16" fill="${treeC}"/>${snowCap ? `<polygon points="-3.5,-10 3.5,-10 0,-16" fill="${snowCap}"/>` : ''}</g>`;
-  return `<svg viewBox="0 0 400 225" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
-      <linearGradient id="gnd" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${ground}"/><stop offset="1" stop-color="${ground2}"/></linearGradient>
-    </defs>
-    <rect width="400" height="120" fill="url(#sky)"/>
-    ${night ? '<circle cx="330" cy="28" r="11" fill="#e8ecff" opacity=".92"/><circle cx="326" cy="25" r="11" fill="' + c1 + '" opacity=".55"/>' : s.season === 0 ? '<circle cx="70" cy="26" r="9" fill="#ffe9a8"/>' : ''}
-    ${stars}
-    <polygon points="0,120 70,66 140,108 230,58 320,104 400,72 400,120" fill="${snow ? '#57639e' : '#39466f'}" opacity=".9"/>
-    <polygon points="0,120 110,86 220,116 320,88 400,112 400,124 0,124" fill="${ground2}" opacity=".55"/>
-    <rect y="118" width="400" height="107" fill="url(#gnd)"/>
-    <path d="M150,225 Q200,196 185,168 Q170,140 195,118 L215,118 Q195,142 210,168 Q226,196 260,225 Z" fill="${snow ? '#b9c9e6' : '#00000022'}" opacity="${snow ? .8 : .5}"/>
-    ${tree(18, 168, 1.1)}${tree(48, 148, .8)}${tree(368, 158, 1)}${tree(352, 176, .75)}${tree(140, 132, .7)}${tree(262, 130, .7)}
-    ${['greenhouse', 'workshop', 'keep', 'chapel', 'market', 'tavern', 'forge', 'manor', 'wall'].map(id => drawBld(id, s.bld[id], s)).join('')}
-    ${vill}
-  </svg>`;
-}
-
-/* ── 메인 맵 뷰 ────────────────────────────────────────────── */
-function presentAt(placeId) {
-  const s = G.state;
-  return ALL_IDS.filter(id => {
-    const c = CHARS[id];
-    const home = c.place || c.home;
-    if (id === 'ellen') return placeId === 'forest' && (s.day + 1) % 2 === 0;
-    if (id === 'lana') return placeId === 'tavern' || (placeId === 'forest' && s.day % 3 === 0);
-    if (s.rel[id] === 'wife' || s.rel[id] === 'concubine') return placeId === 'manor';
-    if (id === 'sgarteron') return placeId === 'chapel' && s.faith > 25;
-    if (id === 'beloa') return placeId === 'castle' && s.day % 7 === 0;
-    if (id === 'mill' || id === 'rebe') return placeId === 'tavern' && (s.day + (id === 'mill' ? 1 : 2)) % 3 !== 0;
-    if (c.core) return home === placeId && (s.day + id.length) % 4 !== 3;
-    if (home !== placeId) return false;
-    return ((s.day * 7 + id.length * 3 + s.phase) % 5) !== 0;
-  });
-}
-
-function placeSubLabel(id) {
-  const c = CHARS[id];
-  const rel = G.state.rel[id];
-  return c.role + (rel ? ` · ${REL_LABEL[rel] || rel}` : '');
-}
-
-function renderMap() {
-  const s = G.state;
-  const w = weather();
-  const places = PLACES.filter(p => {
-    if (p.id === 'manor' && s.bld.manor < 1) return false;
-    if (p.id === 'tavern' && s.bld.tavern < 1) return false;
-    return true;
-  });
-  viewEl().innerHTML = `
-    ${typeof tutorialBanner === 'function' ? tutorialBanner() : ''}
-    <div class="map-card fade">
-      <div class="map-topinfo">
-        <span class="weather-pill">${w.icon} ${w.name}</span>
-        ${s.pregnant ? '<span class="weather-pill">🌱 새 식구 ' + s.pregnant.days + '/20일</span>' : ''}
-      </div>
-      <div class="map-weather"><span class="weather-pill">${PHASES[s.phase]}</span></div>
-      ${territorySVG()}
-      <div class="map-caption">
-        <div><b>${SEASON_ICON[s.season]} ${SEASONS[s.season]}, ${s.dayOfSeason}일째</b><span>${w.desc}</span></div>
-        <span class="map-go">장소를 눌러 이동 →</span>
-      </div>
-    </div>
-    <div class="sect"><h3>영지의 장소</h3><span>행동력 ${s.ap}/${apMax()}</span></div>
-    <div class="place-grid">
-      ${places.map(p => {
-        const ppl = presentAt(p.id);
-        return `<button class="place-btn" data-place="${p.id}">
-          <i class="pi">${p.icon}</i>
-          <span class="pt"><b>${p.name}</b><span>${ppl.length ? ppl.slice(0, 2).map(id => CHARS[id].name).join(', ') + (ppl.length > 2 ? ` 외 ${ppl.length - 2}명` : '') : p.sub}</span>
-          ${ppl.length ? `<span class="faces">${ppl.slice(0, 3).map(id => `<img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK}>`).join('')}</span>` : ''}
-          </span>
-          ${ppl.length ? `<span class="crowd">${ppl.length}</span>` : ''}
-        </button>`;
-      }).join('')}
-    </div>
-    <div class="sect"><h3>알림</h3></div>
-    <div class="card" style="padding:12px 14px">
-      ${s.quests.length ? s.quests.map(q => `<div class="kv"><span>${q.icon} ${q.from} · ${q.label} (D+${q.due - s.day})</span><b>${q.reward}금</b></div>`).join('') : '<div class="hint">온 의뢰는 없다. 상회에서 확인하자.</div>'}
-      ${residents().length ? `<div class="divider"></div><div class="hint">🕯 저택 상주: ${residents().map(id => CHARS[id].name).join(', ')} — 언제나 만날 수 있다.</div>` : ''}
-    </div>`;
-  viewEl().querySelectorAll('[data-place]').forEach(b =>
-    b.addEventListener('click', () => { SFX.play('open'); G.screen = { view: 'place', place: b.dataset.place }; render(); }));
-  const tb = $('#tutBanner');
-  if (tb) tb.addEventListener('click', () => { SFX.play('open'); openGuide(false); });
-}
-
-/* ── 장소 뷰 ──────────────────────────────────────────────── */
-function placeActions(placeId) {
-  const s = G.state;
-  const A = [];
-  if (placeId === 'castle') {
-    A.push({ id: 'tax', icon: '📜', name: '징세', desc: '세금을 걷는다. 민심이 내려간다.', cost: 'AP 1', ap: 1,
-      run: () => { const amt = 14 + s.bld.keep * 4 + Math.round(s.morale / 25); s.gold += amt; s.morale = clamp(s.morale - 5, -100, 100); addLog('징세로 금화 ' + amt + '닢을 걷었다.'); return `금화 ${amt}닢을 걷었다. 마을은 조용했다.`; } });
-    A.push({ id: 'build', icon: '🏗', name: '시설 관리', desc: '건설 · 업그레이드로 영지를 키운다.', cost: '', sheet: 'build' });
-    A.push({ id: 'petition', icon: '📃', name: '청원 처리', desc: '사람들의 청원을 들어준다.', cost: 'AP 1', ap: 1,
-      run: () => { const c = 8 + ri(0, 12); if (s.gold < c) return '곳간이 얇아 청원을 받아줄 수 없었다.'; s.gold -= c; s.morale = clamp(s.morale + 8, -100, 100); s.rep.warm++; return `청원에 금화 ${c}닢을 썼다. 사람들이 고개를 끄덕였다.`; } });
-    A.push({ id: 'decree', icon: '⚖️', name: '법령 반포', desc: '영주의 뜻을 새긴다. 방향은 자유다.', cost: 'AP 1', ap: 1,
-      run: () => {
-        const r = ri(0, 2);
-        if (r === 0) { s.gold += 10; s.rep.cunning++; return '통행세를 올렸다. 금화가, 원망이 남았다.'; }
-        if (r === 1) { s.morale = clamp(s.morale + 9, -100, 100); s.rep.warm++; return '장사 길을 열었다. 좌판이 늘었다.'; }
-        s.faith = clamp(s.faith + 6, 0, 100); s.rep.loyal++; return '기도를 의무화했다. 교단이 기뻐했다.';
-      } });
-  }
-  if (placeId === 'shop') {
-    A.push({ id: 'trade', icon: '💱', name: '물건 사고팔기', desc: '오늘의 시세를 보고 거래한다.', cost: '', sheet: 'trade' });
-    A.push({ id: 'quests', icon: '📋', name: '납품 의뢰', desc: '기한부 의뢰을 확인하고 납품한다.', cost: '', sheet: 'quests' });
-    if (s.bld.market >= 2) A.push({ id: 'ad', icon: '📣', name: '상회 널리기', desc: '손님을 끌어온다. 수입이 늘어난다.', cost: 'AP 1', ap: 1,
-      run: () => { const g = 10 + s.bld.market * 6; s.gold += g; s.morale = clamp(s.morale - 2, -100, 100); return `상회가 붐볐다. 수입 +${g}`; } });
-  }
-  if (placeId === 'chapel') {
-    A.push({ id: 'pray', icon: '🙏', name: '기도', desc: '마음을 가다듬는다. 상처가 조금 아문다.', cost: 'AP 1', ap: 1,
-      run: () => { s.faith = clamp(s.faith + 4, 0, 100); s.hp = clamp(s.hp + 10, 0, s.maxHp); s.rep.loyal++; return '기도가 끝났다. 마음이 가벼워졌다. 신앙 +4, HP +10'; } });
-    A.push({ id: 'tithe', icon: '🕯', name: '십일조', desc: '곳간을 연다. 교단의 신뢰가 오른다.', cost: 'AP 1', ap: 1,
-      run: () => { if (s.gold < 20) return '낼 만한 금화가 없다.'; s.gold -= 20; s.faith = clamp(s.faith + 9, 0, 100); s.rep.loyal += 2; return '십일조를 바쳤다. 교단의 인정을 받았다. 신앙 +9'; } });
-    if (s.bld.chapel >= 3) A.push({ id: 'bless', icon: '✨', name: '성흔 의식', desc: '축복을 내린다. 민심이 크게 오른다.', cost: 'AP 1', ap: 1, req: () => s.faith >= 40,
-      run: () => { if (s.faith < 40) return '신앙이 부족하다.'; s.faith -= 15; s.morale = clamp(s.morale + 14, -100, 100); return '성흔 의식이 거행됐다. 사람들이 눈물을 흘렸다. 민심 +14'; } });
-  }
-  if (placeId === 'workshop') {
-    A.push({ id: 'craft', icon: '⚗️', name: '제작', desc: '물약 · 장비 · 선물을 만든다.', cost: '', sheet: 'craft' });
-    A.push({ id: 'research', icon: '🔭', name: '연구', desc: '약초와 금화를 쏟아 공방을 발전시킨다.', cost: 'AP 1', ap: 1,
-      run: () => { if (s.gold < 12) return '연구비가 모자라다.'; s.gold -= 12; s.items.mana = (s.items.mana || 0) + 1; return '연구의 결실로 마정석을 얻었다.'; } });
-  }
-  if (placeId === 'tavern') {
-    A.push({ id: 'drink', icon: '🍺', name: '술자리', desc: '한잔 한다. 기분과 소문이 오간다.', cost: 'AP 1', ap: 1,
-      run: () => { if (s.gold < 6) return '술값이 없다.'; s.gold -= 6; s.morale = clamp(s.morale + 5, -100, 100); s.rep.bold++; const r = pickRumor(); return r; } });
-    A.push({ id: 'rumor', icon: '👂', name: '소문 듣기', desc: '주점의 귀는 빠르다.', cost: 'AP 1', ap: 1,
-      run: () => { const r = pickRumor(); s.morale = clamp(s.morale + 1, -100, 100); return r; } });
-    if (s.bld.tavern >= 3) A.push({ id: 'meeting', icon: '🤫', name: '비밀 회합', desc: '2층 방에서 뜻밖의 손님이 기다린다.', cost: 'AP 1', ap: 1,
-      run: () => { if (s.gold < 20) return '회합에는 돈이 필요하다.'; s.gold += 26; s.rep.cunning += 3; s.faith = clamp(s.faith - 4, 0, 100); return '검은 마차의 거래가 이루어졌다. 수익 +26, 교단의 눈이 흐려졌다.'; } });
-  }
-  if (placeId === 'forest') {
-    A.push({ id: 'gather', icon: '🌿', name: '채집', desc: '약초와 재료를 얻는다.', cost: 'AP 1', ap: 1,
-      run: () => { const loot = gatherForest(); const parts = []; for (const k in loot) { s.items[k] = (s.items[k] || 0) + loot[k]; parts.push(`${ITEMS[k].name} +${loot[k]}`); } return '숲에서 돌아왔다. ' + parts.join(', '); } });
-    A.push({ id: 'hunt', icon: '⚔️', name: '출진 · 토벌', desc: '검은숲의 위협을 없앤다. 위험하다.', cost: 'AP 1', ap: 1, risk: true,
-      run: () => { G.battleCtx = { from: 'hunt' }; return null; } });
-    A.push({ id: 'patrol', icon: '🛡', name: '순찰', desc: '병력과 경계를 다진다.', cost: 'AP 1', ap: 1,
-      run: () => { s.troops += 1 + (s.bld.wall ? 1 : 0); s.rep.loyal++; return '순찰을 마쳤다. 병력이 정돈됐다.'; } });
-  }
-  if (placeId === 'manor') {
-    A.push({ id: 'rest', icon: '🛏', name: '휴식', desc: '잠시 쉰다. 상처가 많이 아문다.', cost: 'AP 1', ap: 1,
-      run: () => { s.hp = clamp(s.hp + 25, 0, s.maxHp); return '저택의 낮은 천장 아래서 잠깐 눈을 감았다. HP +25'; } });
-    A.push({ id: 'family', icon: '🏠', name: '가족 시간', desc: '상주하는 사람들과 시간을 보낸다.', cost: 'AP 1', ap: 1,
-      run: () => { const r = residents(); if (!r.length) return '상주하는 사람이 아직 없다.'; r.forEach(id => addAff(id, 12)); s.morale = clamp(s.morale + 4, -100, 100); return `${r.map(id => CHARS[id].name).join(', ')}와 저녁을 먹었다. 호감도가 깊어졌다.`; } });
-    if (s.children.length) A.push({ id: 'kids', icon: '👶', name: '아이와 놀기', desc: '영주의 다음 세대.', cost: 'AP 1', ap: 1,
-      run: () => { s.children.forEach(c => c.bond = (c.bond || 0) + 1); s.morale = clamp(s.morale + 5, -100, 100); return '아이들과 놀았다. 성의 복도에 웃음소리가 울렸다.'; } });
-  }
-  return A;
-}
-
-const RUMORS = [
-  '검은숲 깊은 곳에서 빛이 났다는 사냥꾼의 이야기. 마정석이 그립다.',
-  '아르카디아 쪽에서 마정석 값이 뛰고 있다. 등불을 쥐고 있으면 한다.',
-  '교단이 변경의 이단을 살피고 있다. 서신이 오갔다.',
-  '비아 상단이 물약을 대량으로 원한다. 의뢰가 곧 온다.',
-  '올겨울은 길다고 한다. 방한 망토를 쟁여라.',
-  '외뿔의 용병단이 북쪽 길에 있다. 붉은 깃발이 눈에 띈다.',
-  '주점 2층에서 밤에 사람들이 모인다. 등불을 끄고.',
-  '대장간이 철광을 찾는다. 검 한 자루 값이 올랐다.',
-  '왕도에서 온 사절이 성채를 두리번거렸다. 좋은 소문만은 아니다.',
-  '어느 사냥꾼이 늑대 가죽을 값싸게 낼 만하다 한다.',
-];
-function pickRumor() {
-  const r = RUMORS[(G.state.day + G.state.rumors++) % RUMORS.length];
-  return '소문: ' + r;
-}
-
-function renderPlace() {
-  const s = G.state;
-  const p = PLACES.find(x => x.id === G.screen.place);
-  if (typeof tutMark === 'function') tutMark('visit');
-  const acts = placeActions(p.id);
-  const ppl = presentAt(p.id);
-  viewEl().innerHTML = `
-    <div class="place-hero">
-      <img src="assets/${p.bg}.png" alt="">
-      <button class="back-fab" id="backBtn">←</button>
-      <div class="place-head">
-        <div><h2>${p.icon} ${p.name}</h2><p>${p.desc}</p></div>
-        <span class="phase-pill">${PHASES[s.phase]}</span>
-      </div>
-    </div>
-    <div class="sect"><h3>할 수 있는 일</h3><span>행동력 ${s.ap}/${apMax()}</span></div>
-    <div class="action-list">
-      ${acts.map((a, i) => {
-        const locked = a.req && !a.req();
-        return `<button class="action ${locked ? 'locked' : ''} ${a.risk ? 'risk' : ''}" data-act="${i}">
-          <i class="ai">${a.icon}</i>
-          <span class="ab"><b>${a.name}</b><span>${a.desc}</span></span>
-          <span class="ac">${locked ? '조건 미달' : a.cost || '메뉴'}</span>
-        </button>`;
-      }).join('')}
-    </div>
-    <div class="sect"><h3>이곳의 사람들</h3><span>${ppl.length}명</span></div>
-    ${ppl.length ? `<div class="people">${ppl.map(id => {
-      const c = CHARS[id];
-      return `<button class="person" data-person="${id}">
-        <img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK} alt="">
-        <span class="pb"><b>${c.name}</b><span>${placeSubLabel(id)}</span></span>
-        <span class="ps">${c.romance || s.rel[id] ? heartsHTML(s.aff[id] || 0) : `<span class="tag">${TRAITS[c.trait] ? TRAITS[c.trait].name : ''}</span>`}</span>
-      </button>`;
-    }).join('')}</div>` : '<div class="empty">아무도 없다. 조용한 곳이다.</div>'}
-    <div style="height:10px"></div>`;
-  $('#backBtn').addEventListener('click', () => { G.screen = { view: 'map' }; render(); });
-  viewEl().querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
-    const a = acts[+b.dataset.act];
-    if (a.sheet) { openSheet(a.sheet); return; }
-    if (s.ap <= 0) { toast('행동력이 없다. 하루를 마감하자.', 'bad'); return; }
-    if (a.req && !a.req()) { toast('조건이 부족하다.', 'bad'); return; }
-    const r = a.run();
-    if (r === null && G.battleCtx) { openBattle({ name: pick(['원뿔늑대', '도적단', '유적 수호자']), hp: 26 + Math.floor(s.day * 1.2), atk: 7 + Math.floor(s.day / 3), art: 'wolf', loot: { gold: 10 + ri(0, 20), pelt: 1 } }); G.battleCtx = null; spendAP(a.ap); render(); return; }
-    spendAP(a.ap);
-    SFX.play('coin');
-    toast(r, r && (r.includes('+') ? 'good' : ''));
-    if (a.id === 'family' && Math.random() < 0.3) tryConceive();
-    checkGameOver();
-    render();
-  }));
-  viewEl().querySelectorAll('[data-person]').forEach(b => b.addEventListener('click', () => {
-    SFX.play('tap');
-    openChat(b.dataset.person);
-  }));
-}
-
-/* ── 채팅 (바베챗 스타일) ──────────────────────────────────── */
-let CHAT = null;
-function openChat(id) {
-  const s = G.state;
-  const c = CHARS[id];
-  CHAT = { id, log: [], busy: false };
-  const el = document.createElement('div');
-  el.className = 'chat';
-  el.id = 'chatView';
-  el.innerHTML = `
-    <div class="chat-stage">
-      <div class="bg" style="background-image:url('assets/${PLACES.find(p => p.id === (c.place || 'castle')).bg}.png')"></div>
-      <img id="chatSprite" class="chat-sprite px" src="${spriteSrc(id)}" ${IMG_FALLBACK} alt="">
-      <div class="chat-top">
-        <button class="chat-back" id="chatBack">←</button>
-        <span class="phase-pill">${c.romance ? '로맨스 가능' : '교류'}</span>
-      </div>
-      <div class="chat-name">
-        <div class="nm"><h2>${c.name}</h2><span class="role">${c.role}</span></div>
-        <div class="meta">${heartsHTML(s.aff[id] || 0)}<span class="aff-box">호감 ${(s.aff[id] || 0)} · 신뢰 ${trustOf(id)}</span>${s.rel[id] ? `<span class="tag rose">${REL_LABEL[s.rel[id]] || s.rel[id]}</span>` : ''}</div>
-      </div>
-    </div>
-    <div class="chat-body">
-      <div class="log" id="chatLog"></div>
-      <div class="chat-dock">
-        <div class="chips" id="chatChips"></div>
-        <div class="choices" id="chatChoices"></div>
-        <div class="quick-gifts" id="giftRow"></div>
-      </div>
-    </div>`;
-  document.body.appendChild(el);
-  const log = el.querySelector('#chatLog');
-  pushMsg('narr', `${josa(c.name, '과', '와')}의 대화. 처음 듣는 말투, 처음 보는 눈빛.`);
-  pushMsg('them', voiceLine(c, 'greet', s), c.name);
-  renderChips();
-  renderGifts();
-  $('#chatBack').addEventListener('click', closeChat);
-}
-function closeChat() {
-  const el = $('#chatView');
-  if (el) el.remove();
-  CHAT = null;
-  saveGame();
-  render();
-}
-function pushMsg(kind, text, who) {
-  const log = $('#chatLog');
-  if (!log) return;
-  const div = document.createElement('div');
-  div.className = 'msg ' + kind;
-  if (who) div.innerHTML = `<span class="who">${esc(who)}</span>`;
-  div.appendChild(document.createTextNode(text));
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-function chatBusy(ms) {
-  return new Promise(res => {
-    const log = $('#chatLog');
+  renderTitle() {
+    const s = State.load();
+    const hasSave = !!s;
+    $('#app').classList.add('is-hidden');
+    const old = document.getElementById('titleScreen'); if (old) old.remove();
+    const stage = ['serena','kael','greta'].map(id =>
+      `<img class="t-char ${id}" src="assets/${id}.png?v=${ASSET_VER}" alt="">`).join('');
     const t = document.createElement('div');
-    t.className = 'typing';
-    t.innerHTML = '<i></i><i></i><i></i>';
-    log.appendChild(t); log.scrollTop = log.scrollHeight;
-    setTimeout(() => { t.remove(); res(); }, ms || 600);
-  });
-}
+    t.id = 'titleScreen'; t.className = 'title-screen';
+    t.innerHTML = `
+      <div class="title">
+        <div class="t-bg"></div><div class="t-veil"></div>
+        <div class="t-snow">${Array.from({length:26},(_,i)=>`<i style="--x:${(i*37)% 100}%;--d:${6+(i%7)*1.7}s;--s:${1+(i%3)}px"></i>`).join('')}</div>
+        <div class="t-stage">${stage}</div>
+        <div class="t-inner">
+          <p class="t-kicker">《외뿔의 악마》 세계관 · 변경 영주 서사 RPG</p>
+          <h1 class="t-title">레카텐<br><span>아르덴 변경령</span></h1>
+          <p class="t-sub">빈 성의 겨울 — 제1막 파일럿<br><b>15일 · 12인</b></p>
+          <div class="t-menu">
+            ${hasSave ? `<button class="btn primary" data-act="resume">▶ 이어서 — 겨울 ${s.day}일 ${PHASE_NAME[s.phase]}</button>` : ''}
+            <div class="t-new">
+              <input id="tName" maxlength="10" placeholder="영주의 이름" value="${hasSave ? '' : '아르덴 영주'}">
+              <button class="btn ${hasSave ? '' : 'primary'}" data-act="new">✦ 새로 시작한다</button>
+            </div>
+            <button class="btn ghost small" data-act="import">기록 불러오기 (코드)</button>
+          </div>
+          <p class="t-foot">54인의 명부 · 이 겨울에 문을 두드리는 사람은 12인</p>
+        </div>
+      </div>`;
+    document.body.appendChild(t);
+    t.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'new') this.newGame();
+      if (a.dataset.act === 'resume') this.resume();
+      if (a.dataset.act === 'import') this.openImport();
+    });
+  },
 
-/* 선택지 → 의도(호감도 계산용) */
-const TOPIC_INTENT = { greet: 'comfort', work: 'work', praise: 'praise', tease: 'tease', personal: 'secret', deep: 'secret', flirt: 'flirt' };
-const TOPIC_ACTION = {
-  greet: '가볍게 안부를 묻는다.',
-  work: '요즘 어떻게 지내는지 물었다.',
-  praise: '솔직하게 칭찬했다.',
-  tease: '가볍게 장난을 건다.',
-  personal: '개인적인 이야기를 조심스레 꺼낸다.',
-  deep: '마음속에 있는 이야기를 꺼낸다.',
-  flirt: '조금 다정하게, 마음을 전한다.',
+  hideTitle() {
+    const t = document.getElementById('titleScreen'); if (t) t.remove();
+    $('#app').classList.remove('is-hidden');
+  },
+
+  newGame() {
+    const name = ($('#tName')?.value || '').trim() || '아르덴 영주';
+    this.hideTitle();
+    Game.newGame(name);
+  },
+
+  resume() {
+    if (!Game.resume()) { this.toast('⚠️', '기록을 읽지 못했습니다.'); this.renderTitle(); return; }
+    this.hideTitle();
+  },
+
+  openImport() {
+    this.openSheet(`
+      <div class="sheet-head"><h2>기록 불러오기</h2><button class="x" data-close>✕</button></div>
+      <p class="hint">이전에 내보낸 기록 코드를 붙여 넣으십시오.</p>
+      <textarea id="impCode" class="code-area" placeholder="eyJ2IjozLC..."></textarea>
+      <div class="row gap" style="margin-top:10px">
+        <button class="btn primary" id="impGo">불러오기</button>
+        <button class="btn ghost" data-close>취소</button>
+      </div>`);
+    $('#impGo').onclick = () => {
+      const ok = State.importCode($('#impCode').value || '');
+      if (!ok) return this.toast('⚠️', '코드가 올바르지 않습니다.');
+      this.closeSheet(); this.go('today');
+    };
+  },
+
+  exportSave() {
+    const code = State.exportCode();
+    this.openSheet(`
+      <div class="sheet-head"><h2>기록 내보내기</h2><button class="x" data-close>✕</button></div>
+      <p class="hint">아래 코드를 복사해 두면 다른 기기에서 이어서 할 수 있습니다.</p>
+      <textarea class="code-area" readonly>${code}</textarea>
+      <button class="btn primary" id="copyCode">복사</button>`);
+    $('#copyCode').onclick = () => {
+      const t = $('.code-area'); t.select();
+      try { document.execCommand('copy'); this.toast('📋', '복사했습니다.'); } catch (e) {}
+    };
+  },
+
+  go(tab) {
+    this.tab = tab;
+    this.hideTitle();
+    $('#hud').classList.remove('is-hidden');
+    $('#tabbar').classList.remove('is-hidden');
+    this.render();
+  },
+
+  /* ══ 렌더 ══════════════════════════════════════════════ */
+  render() {
+    if (!S()) return;
+    this.renderHud();
+    this.renderTabs();
+    const v = $('#view');
+    v.scrollTop = 0;
+    if (this.tab === 'today') this.viewToday(v);
+    else if (this.tab === 'roster') this.viewRoster(v);
+    else if (this.tab === 'letters') this.viewLetters(v);
+    else if (this.tab === 'book') this.viewBook(v);
+    else if (this.tab === 'domain') this.viewDomain(v);
+  },
+
+  renderHud() {
+    const s = S();
+    const pips = Array.from({ length: 5 }, (_, i) => {
+      const used = i >= slotLeft();
+      return `<i class="pip ${used ? 'off' : 'on'}"></i>`;
+    }).join('');
+    const g = goalsDone();
+    $('#hud').innerHTML = `
+      <div class="hud-row hud-top">
+        <div class="fief"><em>아르덴 변경령</em><b>겨울 <span>${s.day}일</span></b></div>
+        <div class="hud-date">
+          <span class="phase-pill">${PHASE_ICON[s.phase]} ${PHASE_NAME[s.phase]}</span>
+          <button class="icon-btn" data-act="menu">☰</button>
+        </div>
+      </div>
+      <div class="hud-row hud-mid">
+        <div class="pips">${pips}</div>
+        <div class="goal-chip" data-act="goal">1막 목표 <b>${g}/4</b></div>
+      </div>
+      <div class="res-row">
+        <span class="res gold">🪙 <b>${s.gold}</b></span>
+        <span class="res morale">🕯 <b>${s.morale}</b></span>
+        <span class="res faith">⛪ <b>${s.faith}</b></span>
+        <span class="res food">🍞 <b>${s.food}일</b></span>
+        <span class="res troops">🛡 <b>${s.troops}</b></span>
+      </div>`;
+    $('#hud').onclick = e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'menu') this.openMenu();
+      if (a.dataset.act === 'goal') { this.tab = 'domain'; this.render(); }
+    };
+  },
+
+  renderTabs() {
+    const s = S();
+    const inbox = s.letters.inbox.length;
+    const rows = [
+      ['today','🏰','오늘'], ['roster','🪪','명부'], ['letters','✉️','서신'],
+      ['book','📜','수첩'], ['domain','🌫','영지'],
+    ];
+    $('#tabbar').innerHTML = rows.map(([k, i, n]) => `
+      <button class="tab ${this.tab === k ? 'on' : ''}" data-tab="${k}">
+        <i>${i}${k === 'letters' && inbox ? `<b class="badge">${inbox}</b>` : ''}</i><span>${n}</span>
+      </button>`).join('');
+    $('#tabbar').onclick = e => {
+      const b = e.target.closest('[data-tab]'); if (b) this.go(b.dataset.tab);
+    };
+  },
+
+  /* ══ 오늘 ══════════════════════════════════════════════ */
+  viewToday(v) {
+    const s = S();
+    const ev = Game.eventDue(s.day, s.phase);
+    const ambient = AMBIENT[s.phase][s.day % AMBIENT[s.phase].length];
+    const appt = s.appt && s.appt.day === s.day && s.appt.phase === s.phase ? s.appt : null;
+    const letters = s.letters.inbox.length;
+    const goalHtml = goalSummary().map(g =>
+      `<span class="gchip ${g.ok ? 'ok' : ''}">${g.ok ? '✓' : '○'} ${g.name}</span>`).join('');
+    const partners = Object.keys(PLACES).map(k => {
+      const here = Object.keys(s.met).filter(id => ROSTER[id]?.place === k && s.met[id]);
+      return `<button class="place" data-place="${k}">
+        <span class="p-ico">${PLACES[k].icon}</span>
+        <span class="p-name">${PLACES[k].name.split(' · ')[0]}</span>
+        <span class="p-say">${here.length ? here.slice(0,3).map(id => ROSTER[id].name).join(' · ') : '조용하다'}</span>
+      </button>`;
+    }).join('');
+
+    v.innerHTML = `
+      ${s.free ? `<div class="banner">연대기 모드 · 2막 준비 중 — 영지는 계속 돌아간다</div>` : ''}
+      <section class="day-head">
+        <p class="kicker">${PHASE_ICON[s.phase]} ${PHASE_NAME[s.phase]} · 겨울 ${s.day}일</p>
+        <h2>${s.done ? '겨울이 지나간다' : '빈 성의 겨울'}</h2>
+        <p class="ambient">${ev ? '아직 아무 일도 일어나지 않았다. …곧 일어날 것이다.' : ambient}</p>
+      </section>
+
+      ${ev ? `
+      <button class="event-card" data-event="${ev.id}">
+        <span class="ec-kicker">오늘의 장면</span>
+        <b>${esc(ev.title)}</b>
+        <span class="ec-go">장면 보기 ›</span>
+      </button>` : `
+      <div class="calm-card">
+        <span class="ec-kicker">조용한 ${PHASE_NAME[s.phase]}</span>
+        <b>${letters ? '책상 위에 답장하지 않은 편지가 있다.' : '할 일을 고르십시오.'}</b>
+      </div>`}
+
+      ${appt ? `
+      <button class="appt-card" data-appt="1">
+        <span class="a-ico">🕯</span>
+        <span><em>오늘의 약속</em><b>${ROSTER[appt.who].name} · ${PLACES[appt.place].name}</b></span>
+        <span class="a-go">지키러 간다 ›</span>
+      </button>` : ''}
+
+      <div class="goal-row">${goalHtml}</div>
+
+      <div class="sect"><h3>영지의 장소</h3><span>${slotLeft()}번의 행동이 남았다</span></div>
+      <div class="places">${partners}</div>
+
+      <div class="row gap" style="margin:16px 0 6px">
+        <button class="btn primary grow" data-act="next">${s.phase === 'night' ? '🛏 하루 마감' : `다음 시간 ›`}</button>
+        <button class="btn ghost" data-act="menu">☰</button>
+      </div>
+      <p class="hint center">${s.phase === 'night' ? '밤에는 한 번의 행동. 하루가 끝나면 서신이 온다.' : '시간을 보내면 다음 시간대의 장면이 열린다.'}</p>
+    `;
+    v.onclick = e => {
+      const pl = e.target.closest('[data-place]');
+      if (pl) return this.openPlace(pl.dataset.place);
+      const evb = e.target.closest('[data-event]');
+      if (evb) return this.openEventById(evb.dataset.event);
+      if (e.target.closest('[data-appt]')) return Game.keepAppointment();
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'next') Game.nextPhase();
+      if (a.dataset.act === 'menu') this.openMenu();
+    };
+  },
+
+  maybeAutoEvent() {
+    const s = S(); if (!s) return;
+    if (this.scene) return;
+    const ev = Game.eventDue(s.day, s.phase);
+    if (ev) setTimeout(() => this.openScene(ev), 380);
+  },
+
+  /* ══ 명부 ══════════════════════════════════════════════ */
+  viewRoster(v) {
+    const s = S();
+    const ids = Object.keys(ROSTER);
+    const metCount = ids.filter(id => s.met[id]).length;
+    const act1 = ids.filter(id => ROSTER[id].act === 1);
+    const cells = ids.map(id => {
+      const c = ROSTER[id], on = !!s.met[id];
+      return `<button class="rcell ${on ? 'on' : 'locked'}" data-char="${on ? id : ''}" data-lock="${on ? '' : id}">
+        ${on ? `<img src="assets/${id}_portrait.png?v=${ASSET_VER}" alt="">` : `<span class="sil">?</span>`}
+        <b>${on ? c.name : '???'}</b>
+        <i>${on ? c.role : c.role.split(' ')[0]}</i>
+        ${on && c.tier !== '조연' ? `<em class="tier">${c.tier}</em>` : ''}
+      </button>`;
+    }).join('');
+    v.innerHTML = `
+      <section class="day-head">
+        <p class="kicker">명부 · 수집이 아니라 기억</p>
+        <h2>이 겨울에 만난 사람 <span>${metCount}</span><small>/ ${act1.length}</small></h2>
+        <p class="ambient">명부에는 54자리가 있다. 이 겨울에 문을 두드리는 사람은 열둘.</p>
+      </section>
+      <div class="roster-grid">${cells}</div>
+      <p class="hint center" style="margin:14px 0">??? — 아직 오지 않은 사람. 2막이 열리면 이름을 얻는다.</p>`;
+    v.onclick = e => {
+      const b = e.target.closest('[data-char]');
+      if (b && b.dataset.char) return this.openChar(b.dataset.char);
+      const l = e.target.closest('[data-lock]');
+      if (l && l.dataset.lock) {
+        const c = ROSTER[l.dataset.lock];
+        this.toast('🔒', `${c.role} — ${c.act}막에 도착한다.`);
+      }
+    };
+  },
+
+  openChar(id) {
+    const s = S(), c = ROSTER[id];
+    const t = trustOf(id), a = affOf(id);
+    const tier = t >= 60 ? 3 : t >= 40 ? 2 : t >= 20 ? 1 : 0;
+    const line = HUB[id]?.[tier] || c.line;
+    const met = s.met[id];
+    this.openSheet(`
+      <div class="char-sheet">
+        <div class="cs-art"><img src="assets/${id}_portrait.png?v=${ASSET_VER}" alt=""></div>
+        <div class="cs-body">
+          <p class="kicker">${c.role} · ${PLACES[c.place]?.name || ''}</p>
+          <h2>${c.name}</h2>
+          <p class="cs-line">"${line}"</p>
+          <div class="meter"><span>신뢰</span><i><b style="width:${t}%"></b></i><em>${t}</em></div>
+          <div class="meter love"><span>호감</span><i><b style="width:${a / 10}%"></b></i><em>${Math.round(a / 10)}%</em></div>
+          ${s.hints[id] ? `<p class="cs-memo">명부의 한 줄 — ${s.hints[id]}</p>` : ''}
+          ${c.romance ? `<p class="hint">로맨스는 신뢰로 열린다. 선물로는 오르지 않는다.</p>` : ''}
+          ${met && PLACES[c.place] ? `<button class="btn ghost" data-place="${c.place}">${PLACES[c.place].name}에서 만나기</button>` : ''}
+        </div>
+      </div>`);
+    $('.cs-body [data-place]')?.addEventListener('click', e => { this.closeSheet(); this.openPlace(e.target.dataset.place); });
+  },
+
+  /* ══ 서신 ══════════════════════════════════════════════ */
+  viewLetters(v) {
+    const s = S();
+    const inbox = s.letters.inbox.map(id => LETTERS.find(l => l.id === id)).filter(Boolean);
+    const done = s.letters.read.map(id => LETTERS.find(l => l.id === id)).filter(Boolean).slice(-12).reverse();
+    v.innerHTML = `
+      <section class="day-head">
+        <p class="kicker">서신 · 하루 두 통의 답장</p>
+        <h2>편지가 오는 밤</h2>
+        <p class="ambient">오늘 쓸 수 있는 답장 <b>${repliesLeft()}</b>통. 답장 한 줄이 다음 만남을 바꾼다.</p>
+      </section>
+      ${inbox.length ? inbox.map(L => `
+        <button class="letter-row" data-letter="${L.id}">
+          <span class="lr-wax">${L.wax === '교단' ? '✝' : L.wax === '추기경' ? '✝✝' : L.wax === '숲' ? '🌲' : L.wax === '주점' ? '🍺' : L.wax === '공방' ? '⚗' : '✦'}</span>
+          <span class="lr-main"><em>${ROSTER[L.from]?.name || L.from}</em><b>${L.title}</b>
+          <i>${esc(L.body[1] || L.body[0]).slice(0, 46)}…</i></span>
+          <span class="lr-new">새 편지</span>
+        </button>`).join('') : `<div class="empty">답장하지 않은 편지가 없다. 밤이 지나면 새 편지가 온다.</div>`}
+      ${done.length ? `<div class="sect"><h3>지난 서신</h3><span>${done.length}</span></div>
+        ${done.map(L => `<button class="letter-row read" data-letter="${L.id}">
+          <span class="lr-wax">✦</span><span class="lr-main"><em>${ROSTER[L.from]?.name || L.from}</em><b>${L.title}</b></span>
+        </button>`).join('')}` : ''}
+      <p class="hint center" style="margin:16px 0">편지는 하루에 한 통씩 도착한다. 약속은 답장에서 잡힌다.</p>`;
+    v.onclick = e => {
+      const b = e.target.closest('[data-letter]');
+      if (b) this.openLetter(b.dataset.letter);
+    };
+  },
+
+  openLetter(id) {
+    const s = S(), L = LETTERS.find(l => l.id === id); if (!L) return;
+    const replied = s.letters.replied[id] != null;
+    const canReply = !replied && L.replies?.length && repliesLeft() > 0;
+    const body = L.body.map(p => `<p>${esc(p)}</p>`).join('');
+    this.openOverlay(`
+      <div class="letter-wrap">
+        <div class="letter-paper">
+          <div class="lp-head"><span>${esc(L.title)}</span><i>${ROSTER[L.from]?.name || L.from}</i></div>
+          <div class="lp-body">${body}</div>
+          <div class="lp-seal">${L.wax === '교단' ? '✝' : L.wax === '추기경' ? '✝✝' : '✦'}</div>
+        </div>
+        <div class="letter-actions">
+          ${replied ? `<p class="hint center">이미 답장했다. ${s.letters.replied[id] >= 0 ? '' : ''}</p>` :
+            canReply ? `<p class="lbl">답장을 고르십시오 — 오늘 ${repliesLeft()}통 남음</p>
+            ${L.replies.map((r, i) => `
+              <button class="choice tone-${r.tone}" data-reply="${i}">
+                <span class="tone-mark">${r.tone === 'near' ? '가까이' : r.tone === 'far' ? '거리두기' : '장난'}</span>
+                <span class="choice-label">${esc(r.t)}</span>
+              </button>`).join('')}` :
+            L.noReply ? `<button class="btn ghost" data-archive="${L.id}">읽고 보관한다</button>` :
+            `<p class="hint center">오늘의 답장을 다 썼다. 내일 다시 쓰십시오.</p>`}
+          <button class="btn ghost" data-close>닫기</button>
+        </div>
+      </div>`);
+    $('.letter-wrap').onclick = e => {
+      const ar = e.target.closest('[data-archive]');
+      if (ar) {
+        const ss = S();
+        ss.letters.inbox = ss.letters.inbox.filter(x => x !== ar.dataset.archive);
+        if (!ss.letters.read.includes(ar.dataset.archive)) ss.letters.read.push(ar.dataset.archive);
+        State.save(); this.closeOverlay(); this.render(); return;
+      }
+      const b = e.target.closest('[data-reply]');
+      if (b) {
+        const idx = +b.dataset.reply;
+        const out = Game.replyLetter(id, idx);
+        if (!out) return;
+        const r = L.replies[idx];
+        this.showResult(r.res || [], out, () => { this.closeOverlay(); this.render(); });
+      }
+    };
+  },
+
+  /* ══ 수첩 ══════════════════════════════════════════════ */
+  viewBook(v) {
+    const s = S();
+    const tabs = CLUE_TABS.map(t => `<button class="btab ${this.bookTab === t.k ? 'on' : ''}" data-btab="${t.k}">${t.name}${t.k !== 'link' ? `<b>${s.clues.filter(id => CLUES[id]?.tab === t.k).length}</b>` : `<b>${s.inf.length}</b>`}</button>`).join('');
+    let body = '';
+    if (this.bookTab === 'link') {
+      body = `
+        <p class="hint">단서 두 개를 골라 잇는다. 맞는 짝이면 추론 카드가 생긴다.</p>
+        <div class="link-chips">${s.clues.map(id => `<button class="chip ${this.linkSel.includes(id) ? 'on' : ''}" data-link="${id}">${CLUES[id].name}</button>`).join('') || '<span class="hint">단서가 없다.</span>'}</div>
+        <button class="btn primary" data-act="infer" ${this.linkSel.length !== 2 ? 'disabled' : ''}>두 단서를 잇는다</button>
+        ${s.inf.length ? `<div class="sect"><h3>추론 카드</h3><span>${s.inf.length}</span></div>` : ''}
+        ${s.inf.map(id => { const I = INFERENCES.find(x => x.id === id); return I ? `
+          <div class="infer-card"><em>추론</em><b>${I.title}</b><p>${I.text}</p><span>${I.unlock}</span></div>` : ''; }).join('')}`;
+    } else {
+      const list = Object.keys(CLUES).filter(id => CLUES[id].tab === this.bookTab);
+      body = list.map(id => {
+        const c = CLUES[id], got = s.clues.includes(id);
+        return got ? `<div class="clue-card got"><span class="cc-id">${id}</span><b>${c.name}</b><p>${c.text}</p><em>${c.from}</em></div>`
+          : `<div class="clue-card"><span class="cc-id">${id}</span><b>???</b><p class="locked">아직 모른다. ${this.clueHint(id)}</p></div>`;
+      }).join('');
+    }
+    v.innerHTML = `
+      <section class="day-head">
+        <p class="kicker">단서 수첩</p>
+        <h2>아는 것 <span>${s.clues.length}</span><small>/ 12</small> · 추론 ${s.inf.length}</h2>
+        <p class="ambient">단서는 정보가 아니라, 물을 수 있는 권리다.</p>
+      </section>
+      <div class="btabs">${tabs}</div>
+      <div class="book-body">${body}</div>`;
+    v.onclick = e => {
+      const t = e.target.closest('[data-btab]'); if (t) { this.bookTab = t.dataset.btab; this.linkSel = []; return this.render(); }
+      const c = e.target.closest('[data-link]');
+      if (c) {
+        const id = c.dataset.link;
+        if (this.linkSel.includes(id)) this.linkSel = this.linkSel.filter(x => x !== id);
+        else if (this.linkSel.length < 2) this.linkSel.push(id);
+        return this.render();
+      }
+      if (e.target.closest('[data-act="infer"]')) this.tryInfer();
+    };
+  },
+
+  clueHint(id) {
+    const c = CLUES[id]; return `출처 — ${c.from.split(' · ')[0]}`;
+  },
+
+  tryInfer() {
+    const s = S();
+    if (this.linkSel.length !== 2) return;
+    const [a, b] = this.linkSel;
+    const I = INFERENCES.find(x => (x.need[0] === a && x.need[1] === b) || (x.need[0] === b && x.need[1] === a));
+    if (!I) { this.toast('📜', '두 단서가 이어지지 않는다.'); this.linkSel = []; return this.render(); }
+    if (s.inf.includes(I.id)) { this.toast('📜', '이미 이은 추론이다.'); this.linkSel = []; return this.render(); }
+    s.inf.push(I.id);
+    State.save();
+    this.linkSel = [];
+    this.render();
+    this.openSheet(`
+      <div class="sheet-head"><h2>추론 — ${I.title}</h2><button class="x" data-close>✕</button></div>
+      <p class="infer-text">${I.text}</p>
+      <p class="hint">${I.unlock}</p>
+      <button class="btn primary" data-close>기록한다</button>`);
+  },
+
+  /* ══ 영지 ══════════════════════════════════════════════ */
+  viewDomain(v) {
+    const s = S();
+    const tags = Object.keys(TAGS).filter(k => !TAGS[k].hidden).map(k => {
+      const h = tagHeat(k), T = TAGS[k], on = h >= T.at;
+      return `<div class="tag ${on ? 'on' : ''}">
+        <div class="tag-top"><b>${T.icon} ${T.name}</b><span>${h}/${T.max}</span></div>
+        <i class="heat"><b style="width:${(h / T.max) * 100}%"></b></i>
+        <p>${T.desc}${on ? ` <em>열림 — ${T.effect}</em>` : ''}</p>
+      </div>`;
+    }).join('');
+    const builds = Object.entries(BUILDINGS).map(([k, B]) => {
+      const built = isBuilt(k);
+      const cost = Object.entries(B.cost).map(([m, n]) =>
+        `${m === 'gold' ? '🪙' : GOODS[m]?.icon || ''}${n}`).join(' ');
+      return `<button class="build ${built ? 'done' : ''}" data-build="${k}">
+        <span class="b-ico">${B.icon}</span>
+        <span class="b-main"><b>${B.name}</b><i>${B.desc}</i></span>
+        <span class="b-cost">${built ? '완공' : cost}</span>
+      </button>`;
+    }).join('');
+    const visitors = (s.visitors || []).map(v => {
+      const E = ERRANDS[v.key];
+      return `<div class="visit"><span>${E.icon}</span><div><b>${E.title}</b><p>${E.text}</p>
+        <button class="btn small" data-accept="${v.id}">받아들인다</button></div></div>`;
+    }).join('');
+    const errands = (s.errands || []).map(e => {
+      const E = ERRANDS[e.key], left = e.due - s.day;
+      return `<div class="visit"><span>${E.icon}</span><div><b>${E.title}</b>
+        <p>${left >= 0 ? `기한 D-${left}` : '기한 초과'}</p>
+        <button class="btn small" data-deliver="${e.key}">납품한다</button></div></div>`;
+    }).join('');
+
+    v.innerHTML = `
+      <section class="day-head">
+        <p class="kicker">영지 · 소문이 사람을 부른다</p>
+        <h2>아르덴의 겨울</h2>
+        <p class="ambient">금화 ${s.gold} · 민심 ${s.morale} · 질서 ${s.order} · 식량 ${s.food}일</p>
+      </section>
+      <div class="goals">${goalSummary().map(g => `
+        <div class="goal ${g.ok ? 'ok' : ''}"><span>${g.ok ? '✓' : '○'}</span><b>${g.name}</b><i>${g.text}</i></div>`).join('')}</div>
+
+      <div class="sect"><h3>문 앞의 사람들</h3><span>${(s.visitors || []).length + (s.errands || []).length}</span></div>
+      ${visitors || errands ? visitors + errands : `<p class="hint pad">아직 아무도 오지 않았다. 소문이 열리면 사람이 온다.</p>`}
+
+      <div class="sect"><h3>소문</h3><span>${activeTags().length}개 활성</span></div>
+      <div class="tags">${tags}</div>
+
+      <div class="sect"><h3>시설</h3><span>${Object.keys(BUILDINGS).filter(k => isBuilt(k)).length} / ${Object.keys(BUILDINGS).length}</span></div>
+      <div class="builds">${builds}</div>
+      <div class="row gap" style="margin-top:14px">
+        <button class="btn ghost grow" data-act="export">기록 내보내기</button>
+      </div>
+      <p class="hint center" style="margin:12px 0 4px">건설에는 행동 1회가 든다. 재료는 상회에서 사고팔 수 있다.</p>`;
+    v.onclick = e => {
+      const b = e.target.closest('[data-build]');
+      if (b) return Game.build(b.dataset.build);
+      const a = e.target.closest('[data-accept]');
+      if (a) return Game.acceptErrand(a.dataset.accept);
+      const d = e.target.closest('[data-deliver]');
+      if (d) return Game.deliverErrand(d.dataset.deliver);
+      if (e.target.closest('[data-act="export"]')) this.exportSave();
+    };
+  },
+
+  /* ══ 장소 ══════════════════════════════════════════════ */
+  openPlace(key) {
+    const s = S(), P = PLACES[key];
+    const here = Object.keys(s.met).filter(id => ROSTER[id]?.place === key && s.met[id]);
+    const acts = (ACTIONS[key] || []).map(a => {
+      const cost = [];
+      if (a.cost?.gold) cost.push(`🪙 ${a.cost.gold}`);
+      for (const [k, n] of Object.entries(a.cost || {})) if (GOODS[k]) cost.push(`${GOODS[k].icon} ${n}`);
+      return `<button class="act" data-action="${a.id}">
+        <span class="a-ico">${a.icon}</span>
+        <span class="a-main"><b>${a.name}</b><i>${this.effText(a.eff)}</i></span>
+        <span class="a-cost">${cost.join(' ') || '무료'}</span>
+      </button>`;
+    }).join('');
+    const chars = here.map(id => `
+      <button class="pchar" data-char="${id}">
+        <img src="assets/${id}_portrait.png?v=${ASSET_VER}" alt="">
+        <b>${ROSTER[id].name}</b><i>신뢰 ${trustOf(id)}</i>
+      </button>`).join('');
+    const goods = key === 'market' ? Object.keys(GOODS).map(k => {
+      const g = GOODS[k], have = s.items[k] || 0;
+      return `<div class="good">
+        <span>${g.icon} ${g.name} <b>${have}</b></span>
+        <span class="g-btns">
+          <button data-buy="${k}">사기 ${g.buy}G</button>
+          <button data-sell="${k}" ${have ? '' : 'disabled'}>팔기 ${g.sell}G</button>
+        </span></div>`;
+    }).join('') : '';
+
+    this.openSheet(`
+      <div class="place-head">
+        <div class="ph-bg" style="background-image:url('assets/${P.bg}.png?v=${ASSET_VER}')"></div>
+        <div class="ph-txt"><p class="kicker">${P.name}</p><h2>${P.desc}</h2></div>
+      </div>
+      ${here.length ? `<div class="sect"><h3>이곳의 사람</h3><span>${here.length}</span></div><div class="pchars">${chars}</div>` : ''}
+      <div class="sect"><h3>할 수 있는 일</h3><span>${slotLeft()}번 남음</span></div>
+      <div class="acts">${acts}</div>
+      ${goods ? `<div class="sect"><h3>상회 — 사고팔기</h3><span>1회 = 행동 1</span></div><div class="goods">${goods}</div>` : ''}
+    `);
+    const sheet = $('#overlay .sheet');
+    sheet.onclick = e => {
+      const a = e.target.closest('[data-action]');
+      if (a) { if (Game.doAction(key, a.dataset.action)) this.closeSheet(); return; }
+      const b = e.target.closest('[data-buy]');
+      if (b) { Game.buy(b.dataset.buy, 1); this.closeSheet(); return; }
+      const sl = e.target.closest('[data-sell]');
+      if (sl) { Game.sell(sl.dataset.sell, 1); this.closeSheet(); return; }
+      const c = e.target.closest('[data-char]');
+      if (c) { this.closeSheet(); this.openChar(c.dataset.char); }
+    };
+  },
+
+  effText(eff) {
+    if (!eff) return '';
+    const p = [];
+    for (const k of ['gold','morale','faith','food','order','hp']) {
+      if (eff[k]) p.push(`${EFF_LABEL[k][0]} ${eff[k] > 0 ? '+' : ''}${eff[k]}`);
+    }
+    for (const k of Object.keys(GOODS)) if (eff[k]) p.push(`${GOODS[k].name} ${eff[k] > 0 ? '+' : ''}${eff[k]}`);
+    if (eff.tag) p.push('소문');
+    return p.join(' · ') || '—';
+  },
+
+  /* ══ 장면 플레이어 ═════════════════════════════════════ */
+  openEventById(id) {
+    const ev = ACT1_EVENTS.find(e => e.id === id);
+    if (ev) this.openScene(ev);
+  },
+
+  openScene(ev) {
+    if (!ev) return;
+    const S0 = S();
+    const lines = [];
+    if (ev.bg) lines.push({ bg: ev.bg });
+    (ev.scene || []).forEach(l => lines.push(l));
+    const st = { ev, lines, i: 0, phase:'lines', bg: ev.bg || 'bg_castle', who: null, results: [], after: null, night: null };
+    this.scene = st;
+    this.renderScene();
+  },
+
+  renderScene() {
+    const st = this.scene; if (!st) return;
+    const l = st.lines[st.i] || {};
+    if (l.bg) { st.bg = l.bg; st.i++; return this.renderScene(); }
+    if (l.who) st.who = l.who;
+    if (l.n) st.who = null;
+    const c = st.who ? ROSTER[st.who] : null;
+    const isLast = st.i >= st.lines.length - 1;
+    const showChoices = st.phase === 'lines' && isLast;
+    let choices = showChoices ? this.choicesFor(st) : '';
+    if (showChoices && !choices && st.phase === 'lines' && !st.ev.dynamic) {
+      choices = `<button class="btn primary" data-next>계속</button>`;
+    }
+    this.openOverlay(`
+      <div class="scene" data-bg="${st.bg}">
+        <div class="scene-bg" style="background-image:url('assets/${st.bg}.png?v=${ASSET_VER}')"></div>
+        <div class="scene-veil"></div>
+        <div class="scene-top">
+          <span class="kicker">${esc(st.ev.kicker || '')}</span>
+        </div>
+        ${c ? `<div class="scene-stage"><img class="scene-char" src="assets/${st.who}_portrait.png?v=${ASSET_VER}" alt=""></div>` : `<div class="scene-stage empty"></div>`}
+        <div class="scene-box ${l.n ? 'narr' : ''}">
+          ${c ? `<div class="scene-who">${c.name}<em>${c.role}</em></div>` : ''}
+          <p class="scene-text">${esc(l.n || l.t || '')}</p>
+          ${choices ? `<div class="choices">${choices}</div>` : (!showChoices ? `<span class="scene-next">▾</span>` : '')}
+          ${st.phase === 'result' ? `<div class="choices"><button class="btn primary" data-next>계속</button></div>` : ''}
+        </div>
+      </div>`);
+    const sc = $('.scene');
+    sc.onclick = e => {
+      if (e.target.closest('[data-skip]')) { this.scene = null; this.closeOverlay(); Game.finishEvent(st.ev); return; }
+      if (e.target.closest('[data-next]')) return this.advanceResult();
+      const ch = e.target.closest('[data-choice]');
+      if (ch) return this.pickChoice(+ch.dataset.choice);
+      const nl = e.target.closest('[data-night]');
+      if (nl) return this.pickWinter(+nl.dataset.night);
+      if (!e.target.closest('.choices') && st.phase === 'lines') this.advanceLine();
+    };
+  },
+
+  advanceLine() {
+    const st = this.scene; if (!st) return;
+    if (st.i < st.lines.length - 1) { st.i++; this.renderScene(); }
+  },
+
+  choicesFor(st) {
+    const ev = st.ev;
+    if (st.phase !== 'lines') return '';
+    if (ev.dynamic === 'winter_night') {
+      const ids = Game.winterCandidates();
+      if (!ids.length) return `<button class="btn primary" data-night="-1">혼자 밤을 보낸다</button>`;
+      return ids.map(id => `<button class="choice" data-night="${id}">
+        <span class="tone-mark">${ROSTER[id].role}</span>
+        <span class="choice-label">${ROSTER[id].name} 곁에 앉는다</span>
+        <span class="choice-sub">신뢰 ${trustOf(id)}</span></button>`).join('');
+    }
+    const s = S();
+    const list = (ev.choices || []).filter(c => !c.reqClue || c.reqClue.some(id => s.clues.includes(id)));
+    return list.map((c, i) => {
+      const pay = canPay(c.eff);
+      return `<button class="choice tone-${c.tone || 'near'}" data-choice="${i}" ${pay ? '' : 'disabled'}>
+      <span class="tone-mark">${c.tone === 'far' ? '거리두기' : c.tone === 'joke' ? '농담' : c.tone === 'bold' ? '결단' : c.tone === 'cold' ? '냉정' : '가까이'}</span>
+      <span class="choice-label">${esc(c.label)}</span>
+      ${c.sub ? `<span class="choice-sub">${esc(c.sub)}</span>` : ''}
+      ${pay ? '' : '<span class="choice-sub need">자원이 모자란다</span>'}
+    </button>`;
+    }).join('');
+  },
+
+  pickChoice(i) {
+    const st = this.scene; if (!st) return;
+    const ev = st.ev, s = S();
+    const list = (ev.choices || []).filter(c => !c.reqClue || c.reqClue.some(id => s.clues.includes(id)));
+    const c = list[i]; if (!c) return;
+    if (!canPay(c.eff)) return this.toast('⚠️', '자원이 모자란다.');
+    const out = applyEff(c.eff);
+    s.log.push({ d:s.day, k:'choice', ev:ev.id, i, label:c.label });
+    State.save();
+    st.results = (c.res || []).slice();
+    st.effOut = out;
+    st.phase = 'result';
+    st.lines = st.results; st.i = 0; st.who = st.who;
+    /* 결과 첫 줄이 지문이면 초상을 내린다 */
+    this.renderScene();
+    this.showEffToasts(out);
+  },
+
+  advanceResult() {
+    const st = this.scene; if (!st) return;
+    if (st.i < st.lines.length - 1) { st.i++; this.renderScene(); return; }
+    if (st.after) { const f = st.after; this.closeOverlay(); this.scene = null; f(); return; }
+    if (st.night) return this.finishNight();
+    if (st.ev.finale) return this.playFinaleScenes();
+    const after = st.ev.letterAfter;
+    this.closeOverlay();
+    this.scene = null;
+    Game.finishEvent(st.ev);
+    if (after) setTimeout(() => this.openLetter(after), 320);
+  },
+
+  playFinaleScenes() {
+    const st = this.scene; if (!st) return;
+    st.finaleQueue = st.finaleQueue || FINALE_SCENES.slice();
+    const scn = st.finaleQueue.shift();
+    if (!scn) {
+      this.closeOverlay(); this.scene = null; Game.finishEvent(st.ev); return;
+    }
+    st.bg = scn.bg; st.lines = scn.lines; st.i = 0; st.phase = 'lines'; st.who = null;
+    st.ev = Object.assign({}, st.ev, { kicker: '겨울 · 15일 · 밤' });
+    this.renderScene();
+  },
+
+  /* ══ 밤 이벤트 ═════════════════════════════════════════ */
+  openNight(who, fromAppt) {
+    const N = NIGHTS[who]; if (!N) return;
+    const ev = {
+      id: 'N_' + who, kicker: (fromAppt ? '약속의 밤 · ' : '겨울의 밤 · ') + (ROSTER[who]?.name || ''),
+      title: N.title, bg: N.bg, scene: N.scene, choices: N.choices,
+    };
+    this.openScene(ev);
+    const st = this.scene;
+    st.night = { who, fromAppt };
+    if (fromAppt) S().appt = null;
+  },
+
+  finishNight() {
+    const st = this.scene; if (!st) return;
+    const s = S();
+    const n = st.night || {};
+    if (n.who) {
+      s.nightSeen[n.who] = (s.nightSeen[n.who] || 0) + 1;
+      s.flags['night_' + n.who] = 1;
+    }
+    if (st.winter) { s.seen['a1_night'] = 1; s.flags.winter_night_done = 1; }
+    State.save();
+    this.closeOverlay(); this.scene = null;
+    Game.finishEvent({ id: st.ev.id === 'a1_night' ? 'a1_night' : 'N_' + n.who, finale:false });
+  },
+
+  pickWinter(id) {
+    const st = this.scene; if (!st) return;
+    if (id === '-1') {
+      st.winter = false;
+      this.closeOverlay(); this.scene = null; S().seen.a1_night = 1; State.save();
+      Game.finishEvent({ id:'a1_night' }); return;
+    }
+    const who = id;
+    const N = NIGHTS[who];
+    const ev = { id:'N_' + who, kicker:'겨울 · 14일 · 밤 · ' + ROSTER[who].name, title:N.title, bg:N.bg, scene:N.scene, choices:N.choices };
+    this.scene = { ev, lines: [{bg:N.bg}, ...N.scene], i:0, phase:'lines', bg:N.bg, who:null, winter:true, night:{who} };
+    this.renderScene();
+  },
+
+  /* ══ 결과 · 시트 ═══════════════════════════════════════ */
+  showResult(lines, effOut, done) {
+    const st = { ev:{ kicker:'', title:'' }, lines: lines.slice(), i:0, phase:'result', bg: this.scene?.bg || 'bg_castle', who:null, after:done };
+    this.scene = st;
+    this.renderScene();
+    this.showEffToasts(effOut);
+  },
+
+  showActionResult(A, out) {
+    this.openSheet(`
+      <div class="sheet-head"><h2>${A.icon} ${A.name}</h2><button class="x" data-close>✕</button></div>
+      ${A.lines.map(t => `<p class="flavor">${t}</p>`).join('')}
+      <div class="eff-row">${out.map(o => `<span class="eff ${o.cls}">${o.icon} ${o.text}</span>`).join('') || '<span class="eff">변화 없음</span>'}</div>
+      <button class="btn primary" data-close>계속</button>`);
+  },
+
+  showErrandDone(E, out) {
+    this.openSheet(`
+      <div class="sheet-head"><h2>${E.icon} ${E.title}</h2><button class="x" data-close>✕</button></div>
+      <p class="flavor">${E.done}</p>
+      <div class="eff-row">${out.map(o => `<span class="eff ${o.cls}">${o.icon} ${o.text}</span>`).join('')}</div>
+      <button class="btn primary" data-close>계속</button>`);
+  },
+
+  showEffToasts(out) {
+    if (!out?.length) return;
+    const line = out.map(o => `${o.icon} ${o.text}`).join('   ');
+    this.toast('✦', line, 3200);
+  },
+
+  /* ══ 하루 결산 ═════════════════════════════════════════ */
+  openReport(r) {
+    const s = S();
+    const Ls = (r.letters || []).map(id => LETTERS.find(l => l.id === id)).filter(Boolean);
+    this.openSheet(`
+      <div class="sheet-head"><h2>겨울 ${r.day}일의 끝</h2><button class="x" data-close>✕</button></div>
+      <div class="report">
+        <div><span>수입</span><b>🪙 +${r.income}</b></div>
+        <div><span>식량 소모</span><b>🍞 −${r.eat}일</b></div>
+        <div><span>남은 식량</span><b>${r.food}일</b></div>
+        <div><span>민심</span><b>${r.morale}</b></div>
+        <div><span>1막 목표</span><b>${r.goals} / 4</b></div>
+      </div>
+      ${r.warn ? `<p class="warn">${r.warn}</p>` : ''}
+      ${Ls.length ? `<div class="sect"><h3>도착한 서신</h3></div>${Ls.map(L => `<p class="flavor">✉️ ${ROSTER[L.from].name} — ${L.title}</p>`).join('')}` : `<p class="hint">오늘은 편지가 오지 않았다.</p>`}
+      <button class="btn primary" data-close>겨울 ${s.day}일을 시작한다</button>`);
+  },
+
+  /* ══ 완결 ══════════════════════════════════════════════ */
+  openEnding() {
+    const s = S();
+    const top = Object.keys(s.trust).filter(id => s.met[id]).sort((a,b) => (s.trust[b]||0) - (s.trust[a]||0)).slice(0,3);
+    const verbs = { burn:'태웠다', hide:'숨겼다', seal:'봉인해 두었다' };
+    const doc = s.flags.final_burn ? verbs.burn : s.flags.final_hide ? verbs.hide : verbs.seal;
+    const wall = s.bld.wall ? '서쪽 성벽이 다시 서 있다' : '서쪽 성벽은 아직 무너져 있다';
+    this.openOverlay(`
+      <div class="ending">
+        <div class="e-bg"></div><div class="e-veil"></div>
+        <div class="e-inner">
+          <p class="kicker">제1막 · 빈 성의 겨울</p>
+          <h1>눈 그친 밤</h1>
+          <p class="e-sub">겨울 15일. 이름 없는 불빛 하나가 숲 쪽에 서 있다.</p>
+          <div class="e-stats">
+            <div><b>${s.day}</b><span>일</span></div>
+            <div><b>${s.morale}</b><span>민심</span></div>
+            <div><b>${s.clues.length}</b><span>단서</span></div>
+            <div><b>${Object.keys(s.met).length}</b><span>만난 사람</span></div>
+          </div>
+          <div class="e-list">
+            <p>· ${wall}. ${doc}.</p>
+            <p>· 마지막 줄은 아직 비어 있다. ${s.flags.edict ? '사흘의 시한은 끝났다.' : ''}</p>
+            <p>· 가장 가까운 사람 — ${top.map(id => ROSTER[id].name).join(', ') || '아무도 없다'}</p>
+          </div>
+          <p class="e-hook">"사람입니다. …사람이겠지요."</p>
+          <p class="e-next">제2막 「검은숲과 비아 상단」 — 준비 중<br><span>문을 열면, 무엇이 들어오는가.</span></p>
+          <div class="e-btns">
+            <button class="btn primary" data-free>영지를 계속 둘러본다</button>
+            <button class="btn ghost" data-export>기록 내보내기</button>
+          </div>
+          <p class="e-foot">이 파일럿은 여기서 매듭짓는다. 2막에서 이름을 얻을 사람들이 명부에 아직 ???로 남아 있다.</p>
+        </div>
+      </div>`);
+    $('.ending').onclick = e => {
+      if (e.target.closest('[data-free]')) { this.closeOverlay(); Game.enterFree(); }
+      if (e.target.closest('[data-export]')) this.exportSave();
+    };
+  },
+
+  /* ══ 메뉴 ══════════════════════════════════════════════ */
+  openMenu() {
+    const s = S();
+    this.openSheet(`
+      <div class="sheet-head"><h2>기록</h2><button class="x" data-close>✕</button></div>
+      <div class="menu-list">
+        <button data-menu="guide">플레이 안내</button>
+        <button data-menu="export">기록 내보내기 (코드)</button>
+        <button data-menu="home">타이틀로</button>
+      </div>
+      <p class="hint">이 겨울은 15일입니다. 세이브는 자동으로 저장됩니다. (${s.day}일 ${PHASE_NAME[s.phase]})</p>`);
+    $('#overlay .sheet').addEventListener('click', e => {
+      const b = e.target.closest('[data-menu]'); if (!b) return;
+      if (b.dataset.menu === 'export') { this.closeSheet(); this.exportSave(); }
+      if (b.dataset.menu === 'home') { this.closeOverlay(); this.renderTitle(); }
+      if (b.dataset.menu === 'guide') { this.closeSheet(); this.openGuide(); }
+    });
+  },
+
+  openGuide() {
+    this.openSheet(`
+      <div class="sheet-head"><h2>플레이 안내</h2><button class="x" data-close>✕</button></div>
+      <div class="guide">
+        <p><b>1. 하루는 세 시간</b> — 오전 2번, 오후 2번, 밤 1번의 행동. '다음 시간'으로 넘어간다.</p>
+        <p><b>2. 오늘의 장면</b> — 시간이 바뀌면 이야기가 열린다. 선택지는 자원·신뢰·단서를 바꾼다.</p>
+        <p><b>3. 편지</b> — 밤이 지나면 편지가 온다. 답장은 하루 두 통. '가까이'는 약속을 부른다.</p>
+        <p><b>4. 약속</b> — 잡은 밤에 지키지 못하면 신뢰 −5. 밤은 한 사람의 것이다.</p>
+        <p><b>5. 소문</b> — 장소의 행동이 소문 열기를 올린다. 4가 되면 태그가 열리고, 문 앞에 사람이 온다.</p>
+        <p><b>6. 단서</b> — 수첩에서 두 단서를 이으면 추론이 된다. 추론은 3막의 질문을 연다.</p>
+        <p><b>7. 목표</b> — 민심 45 · 성벽 Lv1 · 식량 10일 · 서류와 빈 줄. 15일 밤에 매듭지어진다.</p>
+      </div>`);
+  },
+
+  /* ══ 오버레이 유틸 ═════════════════════════════════════ */
+  openOverlay(html) {
+    const o = $('#overlay');
+    o.innerHTML = html;
+    o.classList.add('on');
+    document.body.classList.add('ovl');
+  },
+
+  closeOverlay() {
+    const o = $('#overlay');
+    o.classList.remove('on'); o.innerHTML = '';
+    document.body.classList.remove('ovl');
+  },
+
+  openSheet(html) {
+    this.openOverlay(`<div class="sheet-bg" data-close></div><div class="sheet"><div class="sheet-grab"></div>${html}</div>`);
+    $('#overlay').onclick = e => {
+      if (e.target.closest('[data-close]') || e.target.classList.contains('sheet-bg')) this.closeOverlay();
+    };
+  },
+
+  closeSheet() { this.closeOverlay(); },
+
+  toast(icon, text, ms) {
+    const root = $('#toast');
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = `<span>${icon}</span>${esc(text)}`;
+    root.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('on'));
+    setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 350); }, ms || 2300);
+  },
+
+  openPrologue() {
+    const ev = Game.scriptedEvent('p_open');
+    const s = S();
+    s.tut = s.tut || {};
+    this.openScene(ev);
+    /* 프롤로그가 끝나면 곧바로 1일차 오전 */
+  },
 };
-const TOPIC_BONUS = { greet: 2, work: 1, praise: 0, tease: 0, personal: 2, deep: 4, flirt: 0 };
 
-/* 인물별 대사 — 없으면 성격 공통 뱅크로 폴백 */
-function voiceLine(c, kind, s) {
-  const bank = (typeof VOICE !== 'undefined') ? VOICE[c.id] : null;
-  const arr = bank && bank[kind];
-  if (arr && arr.length) {
-    /* 같은 대화 안에서 같은 대사가 두 번 나오지 않도록 턴을 섞는다 */
-    if (CHAT) CHAT.turn = (CHAT.turn || 0) + 1;
-    const seed = Math.abs(s.day * 3 + s.phase + (s.aff[c.id] || 0) + kind.length + (CHAT ? CHAT.turn : 0));
-    return arr[seed % arr.length];
-  }
-  const t = TRAITS[c.trait] || TRAITS.kuudere;
-  const fall = { greet: t.talk.neutral, work: t.talk.work, praise: t.talk.praise,
-    tease: t.talk.tease, personal: t.talk.secret, deep: t.talk.secret, flirt: t.talk.flirt }[kind] || t.talk.neutral;
-  return pick(fall);
-}
-
-/* 지금 이 사람과 나눌 수 있는 대화 — 장소·호감도에 맞춰 3~5개 */
-function chatTopics(c, s) {
-  const aff = s.aff[c.id] || 0;
-  const list = [
-    { k: 'greet', label: '안부를 묻는다' },
-    { k: 'work', label: WORK_LABEL[c.place] || '요즘 어떻게 지내나' },
-  ];
-  if (c.romance && aff >= 600 && !s.rel[c.id]) list.push({ k: 'flirt', label: '마음을 전한다', hot: true });
-  else list.push({ k: 'praise', label: '칭찬한다' });
-  list.push({ k: 'tease', label: '가볍게 놀린다' });
-  if (aff >= 500) list.push({ k: 'deep', label: '마음속 이야기를 꺼낸다', hot: true });
-  else if (aff >= 200) list.push({ k: 'personal', label: '개인적인 이야기를 묻는다' });
-  return list;
-}
-
-function renderChips() {
-  const s = G.state;
-  const c = CHARS[CHAT.id];
-  const box = $('#chatChoices');
-  if (!box) return;
-  const aff = s.aff[c.id] || 0;
-  box.innerHTML = chatTopics(c, s).map(o =>
-    `<button class="choice ${o.hot ? 'hot' : ''}" data-ch="${o.k}"><span>${o.label}</span><i>›</i></button>`).join('')
-    + (aff < 200 ? `<div class="choice-hint">호감도 200 — 개인적인 이야기 · 500 — 마음속 이야기가 열립니다</div>` : '');
-  box.querySelectorAll('[data-ch]').forEach(b => b.addEventListener('click', () => chatChoose(b.dataset.ch)));
-
-  /* 특수 행동 */
-  const sp = $('#chatChips');
-  if (!sp) return;
-  let html = '';
-  if (s.mood[c.id] === 'sour') html += `<button class="tchip" data-tone="comfort">사과하기</button>`;
-  const conf = canConfess(c.id);
-  if (c.romance && !s.rel[c.id] && aff >= 600) {
-    html += `<button class="tchip hot" data-tone="confess">♡ 고백${conf.ok ? '' : ` (${conf.why})`}</button>`;
-  }
-  if (s.rel[c.id] === 'lover' || s.rel[c.id] === 'concubine') html += `<button class="tchip" data-tone="marry">💍 프로포즈</button>`;
-  if (!c.core) html += `<button class="tchip" data-tone="recruit">🤝 가신으로</button>`;
-  if (s.rel[c.id] === 'wife' || s.rel[c.id] === 'concubine') html += `<button class="tchip" data-tone="home">🏠 같이 있기</button>`;
-  sp.innerHTML = html;
-  sp.style.display = html ? '' : 'none';
-  sp.querySelectorAll('[data-tone]').forEach(b => b.addEventListener('click', () => handleTone(b.dataset.tone)));
-}
-
-function renderGifts() {
-  const s = G.state;
-  const row = $('#giftRow');
-  if (!row) return;
-  const gifts = Object.keys(s.items).filter(k => s.items[k] > 0 && ITEMS[k] && ITEMS[k].base <= 100);
-  row.innerHTML = `<span class="gift-label">선물</span>` + (gifts.map(k => `<button class="tchip" data-gift="${k}">${ITEMS[k].icon} ${ITEMS[k].name} ×${s.items[k]}</button>`).join('') || '<span class="mini">줄 만한 물건이 없다.</span>');
-  row.querySelectorAll('[data-gift]').forEach(b => b.addEventListener('click', () => giveGift(b.dataset.gift)));
-}
-
-/* 선택지 하나를 고른다 */
-function chatChoose(kind) {
-  if (CHAT.busy) return;
-  const s = G.state;
-  const c = CHARS[CHAT.id];
-  const intent = TOPIC_INTENT[kind] || 'neutral';
-  if (typeof tutMark === 'function') tutMark('talk');
-  CHAT.busy = true;
-  pushMsg('me', TOPIC_ACTION[kind] || '말을 건넨다.');
-  chatBusy(680).then(() => {
-    const repeat = s.flags['_topic_' + kind] === s.day;  /* 같은 화제를 하루에 되풀이하면 값이 줄어든다 */
-    s.flags['_topic_' + kind] = s.day;
-    let gain = Math.round((talkGain(c, intent, s) + (TOPIC_BONUS[kind] || 0)) * 2);
-    let tg = trustGain(c, intent, s);
-    if (repeat) { gain = Math.max(0, Math.round(gain * 0.4)); tg = 0; }
-    addAff(c.id, gain); addTrust(c.id, tg);
-    s.lastTalk[c.id] = s.day;
-    const line = voiceLine(c, kind, s);
-    pushMsg('them', line, c.name);
-    if (gain >= 8) pushMsg('system', `♡ ${c.name}의 호감도가 크게 올랐다 (+${gain})`);
-    else if (gain > 0) pushMsg('system', `호감도 +${gain}${tg ? ` · 신뢰 +${tg}` : ''}`);
-    if (kind === 'deep' || kind === 'personal') s.memories[c.id] = (s.memories[c.id] || []).concat(kind).slice(-6);
-    afterChatStep(c, intent);
-  });
-}
-
-function handleTone(tone) {
-  if (CHAT.busy) return;
-  const s = G.state;
-  const c = CHARS[CHAT.id];
-  if (tone === 'confess') { openConfessSheet(c.id); return; }
-  if (tone === 'marry') { openMarrySheet(c.id); return; }
-  if (tone === 'recruit') { recruitAlly(c.id); return; }
-  if (tone === 'home') {
-    pushMsg('narr', `${c.name}와 저택에서 소소한 시간을 보냈다.`);
-    addAff(c.id, 15); s.morale = clamp(s.morale + 2, -100, 100);
+/* 프롤로그 종료 훅 — p_open의 마지막 결과에서 */
+const _origFinish = Game.finishEvent.bind(Game);
+Game.finishEvent = function (ev) {
+  if (ev && ev.id === 'p_open') {
+    const s = S();
+    s.day = 1; s.phase = 'am'; s.slots = { am:2, pm:2, night:1 };
+    s.tut.seenIntro = true;
+    State.save();
+    UI.go('today');
+    setTimeout(() => UI.maybeAutoEvent(), 450);
     return;
   }
-  if (tone === 'comfort') {
-    CHAT.busy = true;
-    pushMsg('me', '어제 일은 미안했다고, 천천히 말을 꺼낸다.');
-    chatBusy(600).then(() => {
-      s.mood[c.id] = 'warm';
-      pushMsg('them', voiceLine(c, 'greet', s), c.name);
-      pushMsg('system', '기분이 풀린 것 같다.');
-      afterChatStep(c, 'comfort');
-    });
-  }
-}
-
-function giveGift(itemId) {
-  const s = G.state;
-  const c = CHARS[CHAT.id];
-  if (!s.items[itemId]) return;
-  if (s.lastGift[c.id] === s.day) { pushMsg('system', '오늘은 이미 선물했다. 하루에 한 번.'); return; }
-  s.items[itemId]--;
-  s.lastGift[c.id] = s.day;
-  const loved = c.gift === itemId, hated = c.badGift === itemId;
-  const gain = loved ? 45 : hated ? -25 : 12;
-  addAff(c.id, gain);
-  addTrust(c.id, loved ? 6 : 2);
-  const t = TRAITS[c.trait];
-  pushMsg('me', `${ITEMS[itemId].icon} ${ITEMS[itemId].name}을(를) 건넨다.`);
-  chatBusy(600).then(() => {
-    if (loved) { SFX.play('heart'); pushMsg('them', pick(t.talk.praise).replace('그', '이런 걸'), c.name); pushMsg('system', `♡♡ 마음에 든 모양이다. 호감도 +${gain}`); }
-    else if (hated) { SFX.play('bad'); pushMsg('them', '…고맙다. 정말로.', c.name); pushMsg('system', `${c.name}은(는) 별로 좋아하지 않는다 (${gain})`); }
-    else { pushMsg('them', '고맙다. 소중히 하지.', c.name); pushMsg('system', `호감도 +${gain}`); }
-    renderChips(); renderGifts();
-    const meta = $('.chat-name .meta');
-    if (meta) meta.innerHTML = `${heartsHTML(s.aff[c.id] || 0)}<span class="aff-box">호감 ${s.aff[c.id] || 0} · 신뢰 ${trustOf(c.id)}</span>${s.rel[c.id] ? `<span class="tag rose">${REL_LABEL[s.rel[c.id]]}</span>` : ''}`;
-    afterChatStep(c, 'gift');
-    saveGame();
-  });
-}
-
-function afterChatStep(c, intent) {
-  CHAT.busy = false;
-  const s = G.state;
-  renderChips(); renderGifts();
-  const meta = $('.chat-name .meta');
-  if (meta) meta.innerHTML = `${heartsHTML(s.aff[c.id] || 0)}<span class="aff-box">호감 ${s.aff[c.id] || 0} · 신뢰 ${trustOf(c.id)}</span>${s.rel[c.id] ? `<span class="tag rose">${REL_LABEL[s.rel[c.id]]}</span>` : ''}`;
-  /* 하트 이벤트 체크 */
-  for (const stage of HEART_STAGES) {
-    const key = `heart_${c.id}_${stage}`;
-    if ((s.aff[c.id] || 0) >= stage * 100 && !s.flags[key]) {
-      const ev = (HEART_EVENTS[c.id] || []).find(e => e.at === stage);
-      if (ev) {
-        s.flags[key] = true;
-        setTimeout(() => openHeartEvent(c.id, ev), 500);
-        return;
-      }
-    }
-  }
-  /* 질투 */
-  if (intent === 'flirt' && Math.random() < 0.3) {
-    const j = jealousyFor(s, c.id);
-    if (j && s.rel[j.id] && (s.aff[j.id] || 0) > 500) {
-      pushMsg('narr', `저택으로 돌아가니, ${CHARS[j.id].name}이(가) 기다리고 있었다…`);
-      saveGame();
-      return;
-    }
-  }
-  saveGame();
-}
-
-/* ── 하트 이벤트 · 고백 · 혼인 ─────────────────────────────── */
-function openHeartEvent(charId, ev) {
-  const s = G.state;
-  const c = CHARS[charId];
-  openModal(`
-    <div class="ev-kicker">♡ 하트 이벤트 · ${c.name}</div>
-    <h2 class="ev-title">${ev.title}</h2>
-    <p class="ev-text">${ev.text}</p>
-    <div class="ev-choices">
-      ${ev.choices.map((ch, i) => `<button class="ev-choice" data-i="${i}"><span class="em">${i === 0 ? '💗' : '🤍'}</span><span>${ch.t}</span></button>`).join('')}
-    </div>`, () => {
-    document.querySelectorAll('.ev-choice').forEach(b => b.addEventListener('click', () => {
-      const ch = ev.choices[+b.dataset.i];
-      applyDelta({ aff: { [charId]: ch.d.aff || 0 }, trust: ch.d.trust ? { [charId]: ch.d.trust } : null, faith: ch.d.faith, gold: ch.d.gold, troops: ch.d.troops });
-      if (ch.d.unlock) s.flags[ch.d.unlock] = true;
-      if (ch.battle) { closeModal(); addLog(`[하트 이벤트] ${ev.title} — 전투`); openBattle(ch.battle); return; }
-      if (ch.d.love) s.flags['love_' + charId] = true;
-      addLog(`[♡] ${c.name} — ${ev.title}: ${ch.t}`);
-      SFX.play('heart');
-      closeModal();
-      toast(`♡ ${josa(c.name, '과', '와')}의 순간이 기록됐다`, 'good');
-      saveGame();
-      if (CHAT) { pushMsg('narr', `— ${ev.title} —`); pushMsg('narr', `당신의 선택: "${ch.t}"`); pushMsg('them', c.affinityLine || '…….', c.name); }
-    }));
-  });
-}
-
-function openConfessSheet(charId) {
-  const s = G.state;
-  const c = CHARS[charId];
-  const conf = canConfess(charId);
-  openModal(`
-    <div class="ev-kicker">♡ 고백</div>
-    <h2 class="ev-title">${c.name}에게 마음을 전한다</h2>
-    <p class="ev-text">${conf.ok ? '두근거리는 순간이다. 어떤 관계를 원하는가?' : conf.why}</p>
-    ${conf.ok ? `<div class="ev-choices">
-      <button class="ev-choice" data-k="lover"><span class="em">💗</span><span>연인이 되고 싶다<small>서로 마음만 통하는 사이</small></span></button>
-      ${s.bld.manor >= 1 ? `<button class="ev-choice" data-k="wife"><span class="em">💍</span><span>아내로 맞이한다<small>저택 내실에 상주 · 내조 버프</small></span></button>
-      <button class="ev-choice" data-k="concubine"><span class="em">🏠</span><span>별채에 들인다<small>첩 · 저택 상주 · 기존 배우자의 질투</small></span></button>` : '<div class="hint mt8">저택 별채를 지으면 혼인 · 첩이 가능해진다.</div>'}
-      <button class="ev-choice" data-k="cancel"><span class="em">🤍</span><span>아직은 아니다</span></button>
-    </div>` : ''}`, () => {
-    document.querySelectorAll('.ev-choice').forEach(b => b.addEventListener('click', () => {
-      const k = b.dataset.k;
-      closeModal();
-      if (k === 'cancel' || !conf.ok) return;
-      const accept = (s.aff[charId] || 0) >= 750;
-      chatThen(c.name, accept ? null : '거절');
-      if (!accept) return;
-      doConfess(charId, k);
-      if (k === 'wife' || k === 'concubine') {
-        const others = Object.keys(s.rel).filter(id => id !== charId && ['wife', 'lover', 'concubine'].includes(s.rel[id]));
-        if (others.length) setTimeout(() => {
-          const o = others[0];
-          const arr = JEALOUSY_LINES[o] || JEALOUSY_LINES[o.replace('2', '')] || ['…….'];
-          toast(`${CHARS[o].name}: ${arr[0]}`, 'bad');
-          s.aff[o] = Math.max(0, (s.aff[o] || 0) - 60);
-          addLog(`${CHARS[o].name}의 질투 — 호감도가 내려갔다.`);
-        }, 900);
-      }
-      toast(`♡ ${c.name}${k === 'wife' ? josa(c.name, '와', '와') + ' 혼인' : k === 'concubine' ? '를 별채에 들임' : josa(c.name, '과', '와') + ' 연인'}이 되었다`, 'gold');
-      saveGame();
-    }));
-  });
-}
-function chatThen(name, mode) {
-  if (!CHAT) return;
-  if (mode === '거절') { pushMsg('them', '…지금은 아직, 대답할 수 없어.', name); return; }
-  pushMsg('narr', `— 고백의 답 —`);
-  pushMsg('them', '…그래. 나도, 너였다.', name);
-}
-
-function openMarrySheet(charId) {
-  const s = G.state;
-  const c = CHARS[charId];
-  openModal(`
-    <div class="ev-kicker">💍 프로포즈</div>
-    <h2 class="ev-title">${c.name}에게 혼인을 청한다</h2>
-    <p class="ev-text">${s.bld.manor >= 1 ? '저택의 내실에 방이 하나 있다.' : '저택 별채가 없어 맞이할 수 없다.'}</p>
-    ${s.bld.manor >= 1 ? `<div class="ev-choices">
-      <button class="ev-choice" data-k="wife"><span class="em">💍</span><span>정식 아내로 맞이한다<small>영주 저택 상주 · 내조 버프 · 자녀 가능</small></span></button>
-      <button class="ev-choice" data-k="concubine"><span class="em">🏠</span><span>첩으로 별채에 들인다<small>기존 아내의 질투가 따른다</small></span></button>
-    </div>` : ''}`, () => {
-    document.querySelectorAll('.ev-choice').forEach(b => b.addEventListener('click', () => {
-      closeModal();
-      if (!b.dataset.k) return;
-      doConfess(charId, b.dataset.k);
-      toast(`💍 ${c.name}와의 새 관계가 시작됐다`, 'gold');
-      saveGame();
-    }));
-  });
-}
-
-function recruitAlly(charId) {
-  const s = G.state;
-  const c = CHARS[charId];
-  if (s.rel[charId]) { pushMsg('system', `${c.name}은(는) 이미 ${REL_LABEL[s.rel[charId]]}이다.`); return; }
-  if ((s.aff[charId] || 0) < 350) { pushMsg('them', '…아직 어디 소속도 모르는 사람을 믿을 수는 없지.', c.name); pushMsg('system', '호감도 350 이상에서 가신 계약이 가능하다.'); return; }
-  s.rel[charId] = 'ally';
-  addAff(charId, 30);
-  SFX.play('level');
-  pushMsg('them', pick(TRAITS[c.trait].talk.work || TRAITS[c.trait].talk.neutral), c.name);
-  pushMsg('system', `🤝 ${c.name}이(가) 아르덴의 가신이 되었다.`);
-  addLog(`${c.name}을(를) 가신으로 들였다.`);
-  milestone('🤝 가신 계약', `${c.name}이(가) 아르덴의 가신이 되었다.`);
-  renderChips();
-  saveGame();
-}
-
-/* ── 모달 / 시트 ──────────────────────────────────────────── */
-function openModal(inner, after) {
-  const root = document.getElementById('modal-root');
-  root.className = 'modal-root';
-  root.innerHTML = `<div class="scrim"></div><div class="sheet"><div class="sheet-grip"></div><div class="sheet-body">${inner}</div></div>`;
-  requestAnimationFrame(() => root.classList.add('open'));
-  root.querySelector('.scrim').addEventListener('click', closeModal);
-  if (after) setTimeout(after, 60);
-}
-function closeModal() {
-  const root = document.getElementById('modal-root');
-  root.classList.remove('open');
-  setTimeout(() => { root.innerHTML = ''; root.className = 'modal-root'; }, 260);
-  setTimeout(() => { if (G.state && typeof nextMilestone === 'function') nextMilestone(); }, 320);
-}
-
-function openSheet(kind) { SFX.play('open'); SHEETS[kind](); }
-
-const SHEETS = {
-  build() {
-    const s = G.state;
-    openModal(`
-      <div class="ev-kicker">🏗 영지 개발</div>
-      <h2 class="ev-title">시설 건설 · 업그레이드</h2>
-      <p class="hint mb6">지은 만큼 영지가 자라고, 매일 수확이 굴러들어온다.</p>
-      ${BUILDINGS.map(b => {
-        const lv = s.bld[b.id];
-        const chk = canBuild(b.id);
-        const cost = b.cost[Math.min(lv, b.max - 1)];
-        return `<div class="bcard">
-          <div class="bi">${b.icon}</div>
-          <div class="bb">
-            <b>${b.name}<span class="lv">${lv ? 'Lv' + lv : '미건설'}</span></b>
-            <p>${b.desc}</p>
-            <div class="cost">${lv < b.max ? `<span class="${s.gold >= (cost ? cost.gold : 0) ? '' : 'no'}">💰 ${cost ? cost.gold : '-'}</span>` + Object.keys(cost || {}).filter(k => k !== 'gold').map(k => `<span class="${itemCount(k) >= cost[k] ? '' : 'no'}">${ITEMS[k].icon} ${ITEMS[k].name} ×${cost[k]}</span>`).join('') : '<span>최고 단계</span>'}</div>
-            <div class="mini mt8">효과: ${b.effect[Math.max(0, Math.min(lv, b.max) - (lv ? 0 : 0)) || 0]}</div>
-          </div>
-          ${lv < b.max ? `<button class="btn small ${chk.ok ? 'primary' : 'ghost'}" data-b="${b.id}">${lv ? '증축' : '건설'}</button>` : ''}
-        </div>`;
-      }).join('')}`, () => {
-      document.querySelectorAll('[data-b]').forEach(btn => btn.addEventListener('click', () => {
-        if (doBuild(btn.dataset.b)) { toast('🏗 영지가 자랐다!', 'gold'); SHEETS.build(); render(); }
-        else toast('재료가 부족하다.', 'bad');
-      }));
-    });
-  },
-  trade() {
-    const s = G.state;
-    const stock = marketStock();
-    openModal(`
-      <div class="ev-kicker">💱 아르덴 상회</div>
-      <h2 class="ev-title">오늘의 시세</h2>
-      <p class="hint mb6">시세는 매일 바뀐다. 싸게 사서 비싸게 팔자.</p>
-      ${Object.keys(ITEMS).map(id => {
-        const it = ITEMS[id];
-        const p = priceOf(id), sp = sellPrice(id), bp = buyPrice(id);
-        const up = p > it.base;
-        return `<div class="mrow">
-          <div class="ic">${it.icon}</div>
-          <div class="mb"><b>${it.name} <span class="stock">보유 ${s.items[id] || 0}</span></b><span>${it.desc}</span></div>
-          <div class="mq">
-            <button class="qbtn" data-sell="${id}">팔</button>
-            <span class="val ${up ? 'price-up' : 'price-down'}">${sp}</span>
-            <button class="qbtn" data-buy="${id}">삼</button>
-            <span class="val" style="color:var(--dim)">${bp}</span>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="hint mt8">팔기: 흥정 창이 열린다 · 삼기: 즉시 구매 (상회 레벨 ${s.bld.market})</div>`, () => {
-      document.querySelectorAll('[data-sell]').forEach(b => b.addEventListener('click', () => openHaggle(b.dataset.sell)));
-      document.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
-        const id = b.dataset.buy;
-        const bp = buyPrice(id);
-        if (s.gold < bp) { toast('금화가 부족하다.', 'bad'); return; }
-        s.gold -= bp; s.items[id] = (s.items[id] || 0) + 1;
-        if (typeof tutMark === 'function') tutMark('dev');
-        SFX.play('coin'); toast(`${ITEMS[id].name} 구매 -${bp}금`, 'gold');
-        saveGame(); SHEETS.trade(); render();
-      }));
-    });
-  },
-  quests() {
-    const s = G.state;
-    openModal(`
-      <div class="ev-kicker">📋 납품 의뢰</div>
-      <h2 class="ev-title">기한부 의뢰</h2>
-      ${s.quests.length ? s.quests.map((q, i) => {
-        const have = itemCount(q.item) >= q.qty;
-        return `<div class="mrow">
-          <div class="ic">${q.icon}</div>
-          <div class="mb"><b>${q.from} · ${q.label}</b><span>보상 ${q.reward}금 · D+${q.due - s.day}</span></div>
-          <button class="btn small ${have ? 'primary' : 'ghost'}" data-q="${i}">${have ? '납품' : '재료 부족'}</button>
-        </div>`;
-      }).join('') : '<p class="hint">온 의뢰가 없다. 하루가 지나면 온다.</p>'}`, () => {
-      document.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => {
-        const q = s.quests[+b.dataset.q];
-        if (itemCount(q.item) < q.qty) { toast('재료가 부족하다.', 'bad'); return; }
-        s.items[q.item] -= q.qty;
-        s.gold += q.reward;
-        s.quests = s.quests.filter(x => x.id !== q.id);
-        s.morale = clamp(s.morale + 3, -100, 100);
-        SFX.play('level');
-        toast(`📋 납품 완료 +${q.reward}금`, 'gold');
-        addLog(`${q.from} 의뢰 납품 (${q.label}) +${q.reward}금`);
-        saveGame(); SHEETS.quests(); render();
-      }));
-    });
-  },
-  craft() {
-    const s = G.state;
-    const lv = s.bld.workshop;
-    openModal(`
-      <div class="ev-kicker">⚗️ 연금 공방</div>
-      <h2 class="ev-title">제작 (공방 Lv${lv})</h2>
-      ${RECIPES.map((r, i) => {
-        const locked = r.lv > lv || (r.forge && !s.bld.forge);
-        const can = !locked && Object.keys(r.need).every(k => itemCount(k) >= r.need[k]) && s.gold >= r.fee;
-        return `<div class="mrow">
-          <div class="ic">${ITEMS[r.out].icon}</div>
-          <div class="mb"><b>${r.name}</b><span>${r.desc}</span>
-            <div class="cost mt8">${Object.keys(r.need).map(k => `<span class="${itemCount(k) >= r.need[k] ? '' : 'no'}">${ITEMS[k].icon}×${r.need[k]}</span>`).join('')}<span class="${s.gold >= r.fee ? '' : 'no'}">💰${r.fee}</span></div>
-          </div>
-          <button class="btn small ${can ? 'primary' : 'ghost'}" data-c="${i}" ${can ? '' : 'disabled'}>${locked ? '잠김' : '제작'}</button>
-        </div>`;
-      }).join('')}`, () => {
-      document.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
-        const r = RECIPES[+b.dataset.c];
-        const res = craft(r, 1);
-        if (!res) { toast('재료가 부족하다.', 'bad'); return; }
-        toast(`${ITEMS[r.out].icon} ${ITEMS[r.out].name} 제작${res.crit ? ' — 대성공!' : ''}`, res.crit ? 'gold' : 'good');
-        saveGame(); SHEETS.craft(); render();
-      }));
-    });
-  },
+  return _origFinish(ev);
 };
 
-function openHaggle(itemId) {
-  const s = G.state;
-  const base = sellPrice(itemId);
-  const miraBoost = (s.aff.mira || 0) >= 300;
-  openModal(`
-    <div class="ev-kicker">💰 흥정</div>
-    <h2 class="ev-title">${ITEMS[itemId].name} 팔기</h2>
-    <p class="hint mb6">안전한 값을 받을지, 배보다 배꼽을 노릴지.</p>
-    <div class="ev-choices">
-      ${[['안전가', 1.0, 1], ['적정가', 1.15, 0.75], ['공격가', 1.35, 0.45], ['모험가', 1.6, 0.2]].map(([n, m, p], i) => `
-        <button class="ev-choice" data-h="${i}"><span class="em">${['🪙', '⚖️', '🔥', '🎲'][i]}</span><span>${n} — ${Math.round(base * m)}금<small>성공 확률 ${Math.round(Math.min(0.98, p + (miraBoost ? 0.15 : 0)) * 100)}%</small></span></button>`).join('')}
-    </div>`, () => {
-    document.querySelectorAll('[data-h]').forEach(b => b.addEventListener('click', () => {
-      const i = +b.dataset.h;
-      const mult = [1, 1.15, 1.35, 1.6][i];
-      let p = [1, 0.75, 0.45, 0.2][i] + (miraBoost ? 0.15 : 0);
-      p = Math.min(0.98, p);
-      if (!s.items[itemId]) { closeModal(); toast('물건이 없다.', 'bad'); return; }
-      if (Math.random() < p) {
-        const got = Math.round(base * mult);
-        s.items[itemId]--;
-        s.gold += got;
-        SFX.play('coin');
-        toast(`${ITEMS[itemId].name} 판매 +${got}금`, 'gold');
-        addLog(`${ITEMS[itemId].name}${josa(ITEMS[itemId].name, '을', '를')} ${got}금에 팔았다.`);
-      } else {
-        SFX.play('bad');
-        toast('손님이 혀를 찬 채 나갔다…', 'bad');
-      }
-      closeModal(); saveGame(); render();
-    }));
-  });
-}
-
-/* ── 전투 ─────────────────────────────────────────────────── */
-let BAT = null;
-function openBattle(enemy) {
-  const s = G.state;
-  BAT = { enemy: { ...enemy, maxHp: enemy.hp }, log: ['검을 뽑았다!'], over: false };
-  const support = battleSupport();
-  openModal(`
-    <div class="ev-kicker">⚔️ 전투</div>
-    <h2 class="ev-title">${enemy.name}</h2>
-    <div class="battle-stage">
-      <img class="px" src="assets/wolf.png" alt="">
-      <div class="hpbar">
-        <div class="nm"><span>${enemy.name}</span><span id="eHp">${enemy.hp}/${enemy.hp}</span></div>
-        <div class="bar rose"><i id="eHpBar" style="width:100%"></i></div>
-      </div>
-    </div>
-    <div class="hpbar" style="position:static;margin-top:10px">
-      <div class="nm"><span>${esc(s.name)}</span><span id="pHp">${s.hp}/${s.maxHp}</span></div>
-      <div class="bar"><i id="pHpBar" style="width:${s.hp / s.maxHp * 100}%"></i></div>
-    </div>
-    ${support ? `<div class="quote-box mt8">🤝 ${support.name}의 지원 스킬 대기 중 (호감도 연동)</div>` : ''}
-    <div class="battle-log" id="batLog"></div>
-    <div class="battle-acts" id="batActs">
-      <button class="btn" data-a="slash">⚔️ 검격 (공격력 ${playerAtk()})</button>
-      <button class="btn" data-a="heavy">💥 강하게 (50% · 대미지 ×2)</button>
-      <button class="btn" data-a="potion">🧪 물약 (보유 ${itemCount('potion')})</button>
-      <button class="btn ghost" data-a="flee">🏃 이탈</button>
-    </div>`, () => {
-    batLog(BAT.log[0]);
-    document.querySelectorAll('#batActs [data-a]').forEach(b => b.addEventListener('click', () => batAct(b.dataset.a)));
-  });
-}
-function batLog(t) {
-  const el = $('#batLog');
-  if (el) { el.innerHTML = esc(t); BAT.log = [t].concat(BAT.log).slice(0, 6); }
-}
-function batAct(a) {
-  const s = G.state;
-  if (!BAT || BAT.over) return;
-  const e = BAT.enemy;
-  if (a === 'slash' || a === 'heavy') {
-    let dmg = playerAtk() + ri(0, 4);
-    if (a === 'heavy') {
-      if (Math.random() < 0.5) { dmg *= 2; }
-      else { dmg = 0; batLog('헛방했다!'); enemyTurn(); return; }
-    }
-    const support = battleSupport();
-    let supTxt = '';
-    if (support && Math.random() < 0.35) { dmg += 6; supTxt = ` ${support.name}의 지원 일격이 더했다!`; }
-    e.hp -= dmg;
-    SFX.play('sword');
-    batLog(`검이 스쳤다 — ${dmg} 대미지!${supTxt}`);
-    updateBars();
-    if (e.hp <= 0) return batEnd(true);
-    enemyTurn();
-  } else if (a === 'potion') {
-    if (itemCount('potion') < 1) { batLog('물약이 없다!'); enemyTurn(); return; }
-    s.items.potion--;
-    s.hp = clamp(s.hp + 22, 0, s.maxHp);
-    SFX.play('craft');
-    batLog('물약을 마셨다. HP +22');
-    updateBars();
-    enemyTurn();
-  } else if (a === 'flee') {
-    if (Math.random() < 0.6) { closeModal(); BAT = null; toast('무사히 빠져나왔다.'); }
-    else { batLog('빠져나가지 못했다!'); enemyTurn(); }
-  }
-}
-function enemyTurn() {
-  const s = G.state;
-  const e = BAT.enemy;
-  const dmg = Math.max(1, e.atk + ri(-2, 2) - playerDef());
-  s.hp -= dmg;
-  SFX.play('hurt');
-  batLog(`${e.name}의 반격 — ${dmg} 대미지!`);
-  updateBars();
-  if (s.hp <= 0) batEnd(false);
-}
-function updateBars() {
-  const s = G.state;
-  const e = BAT.enemy;
-  const eH = $('#eHp'), eB = $('#eHpBar'), pH = $('#pHp'), pB = $('#pHpBar');
-  if (eH) eH.textContent = `${Math.max(0, e.hp)}/${e.maxHp}`;
-  if (eB) eB.style.width = `${Math.max(0, e.hp / e.maxHp * 100)}%`;
-  if (pH) pH.textContent = `${Math.max(0, s.hp)}/${s.maxHp}`;
-  if (pB) pB.style.width = `${Math.max(0, s.hp / s.maxHp * 100)}%`;
-}
-function batEnd(win) {
-  const s = G.state;
-  BAT.over = true;
-  const acts = $('#batActs');
-  if (win) {
-    SFX.play('level');
-    const loot = BAT.enemy.loot || {};
-    let msg = '승리! 전리품: ';
-    if (loot.gold) { s.gold += loot.gold; msg += `금화 ${loot.gold} `; }
-    if (loot.pelt) { s.items.pelt = (s.items.pelt || 0) + loot.pelt; msg += `늑대 가죽 ${loot.pelt} `; }
-    if (loot.mana) { s.items.mana = (s.items.mana || 0) + loot.mana; msg += `마정석 ${loot.mana} `; }
-    if (loot.crystal) { s.items.crystal = (s.items.crystal || 0) + loot.crystal; msg += `빛결정 ${loot.crystal}`; }
-    s.rep.bold++;
-    addLog(`토벌 승리 (${BAT.enemy.name}) — ${msg}`);
-    batLog(msg);
-    toast('⚔️ ' + msg, 'gold');
-  } else {
-    s.hp = 1;
-    s.gold = Math.max(0, s.gold - 20);
-    batLog('쓰러졌다… 누군가 끌고 갔다. 금화 일부를 잃었다.');
-    toast('전투에서 쓰러졌다. 금화 -20', 'bad');
-    addLog('전투 패배. 금화 일부를 잃었다.');
-  }
-  if (acts) acts.innerHTML = '<button class="btn primary wide" id="batDone">돌아가기</button>';
-  const done = $('#batDone');
-  if (done) done.addEventListener('click', () => { closeModal(); BAT = null; saveGame(); render(); });
-}
-
-/* ── 하루 마감 · 결산 ─────────────────────────────────────── */
-function openSleep() {
-  const s = G.state;
-  const r = endDay(s.phase === 2);
-  if (r.over === 'bankrupt') {
-    openModal(`
-      <div class="ev-kicker">게임 오버</div>
-      <h2 class="ev-title">축출당한 영주</h2>
-      <p class="ev-text">곳간이 텅 비고, 빚이 성벽보다 높아졌다. 사람들이 문 앞에 모였다.\n\n${s.day}일간의 아르덴 연대기는 여기서 끝났다.</p>
-      <div class="ev-choices"><button class="ev-choice" id="restart"><span class="em">↺</span><span>새로 시작한다</span></button></div>`, () => {
-      $('#restart').addEventListener('click', () => { clearSave(); closeModal(); showTitle(); });
-    });
-    return;
-  }
-  const w2 = weather();
-  const ev = r.pendingEvent;
-  openModal(`
-    <div class="ev-kicker">🛏 ${s.day - 1}일차 결산</div>
-    <h2 class="ev-title">하루가 저물었다</h2>
-    <div class="card" style="padding:10px 12px;margin-bottom:10px">
-      ${r.inc.lines.map(l => `<div class="kv"><span>${l.split(' ')[0]}</span><b>${l.split(' ').slice(1).join(' ')}</b></div>`).join('')}
-      <div class="kv"><span>총 곳간</span><b style="color:${s.gold < 0 ? 'var(--red)' : 'var(--gold)'}">${s.gold} 금화</b></div>
-    </div>
-    <p class="hint">내일: ${w2.icon} ${w2.name} — ${w2.desc}</p>
-    ${s.pregnant ? `<p class="hint mt8">🌱 ${CHARS[s.pregnant.mom].name}의 새 식구가 오기까지 ${20 - s.pregnant.days}일 남았다.</p>` : ''}
-    <div class="ev-choices">
-      ${ev ? `<button class="ev-choice" id="evGo"><span class="em">❗</span><span>${ev.title}<small>${ev.kicker} — 하루가 시작되기 전에 일이 터졌다</small></span></button>` : ''}
-      <button class="ev-choice" id="sleepGo"><span class="em">🌅</span><span>아침을 맞는다</span></button>
-    </div>`, () => {
-    const go = () => { closeModal(); render(); };
-    $('#sleepGo').addEventListener('click', () => { SFX.play('day'); go(); if (ev && ev.place === 'castle') setTimeout(() => openEventModal(ev), 400); });
-    if (ev) $('#evGo').addEventListener('click', () => { closeModal(); render(); openEventModal(ev); });
-  });
-}
-
-function openEventModal(ev) {
-  const s = G.state;
-  openModal(`
-    <div class="ev-kicker">${ev.kicker}</div>
-    <h2 class="ev-title">${ev.title}</h2>
-    <p class="ev-text">${ev.text}</p>
-    <div class="ev-choices">
-      ${ev.choices.map((c, i) => {
-        const cost = c.cost || {};
-        const costTxt = Object.keys(cost).map(k => k === 'gold' ? `💰${cost[k]}` : k === 'troops' ? `🛡${cost[k]}` : `${ITEMS[k] ? ITEMS[k].icon : ''}${ITEMS[k] ? ITEMS[k].name : k}×${cost[k]}`).join(' ');
-        const cant = Object.keys(cost).some(k => k === 'gold' ? s.gold < cost[k] : k === 'troops' ? s.troops < cost[k] : itemCount(k) < cost[k]);
-        return `<button class="ev-choice" data-i="${i}" ${cant ? 'style="opacity:.5"' : ''}><span class="em">${cant ? '🔒' : '▸'}</span><span>${c.t}${costTxt ? `<small>${costTxt}</small>` : ''}</span></button>`;
-      }).join('')}
-    </div>`, () => {
-    document.querySelectorAll('.ev-choice').forEach(b => b.addEventListener('click', () => {
-      const choice = ev.choices[+b.dataset.i];
-      const r = runEventChoice(ev, choice);
-      if (!r) { toast('조건이 부족하다.', 'bad'); return; }
-      closeModal();
-      if (r.battle) { openBattle(r.battle); toast(choice.res); }
-      else { SFX.play('coin'); toast(choice.res); }
-      render();
-    }));
-  });
-}
-
-/* ── 마일스톤 · 축하 팝업 ─────────────────────────────────── */
-const MS_QUEUE = [];
-function milestone(title, text) {
-  const s = G.state;
-  if (s.milestones.includes(s.day + title)) return;
-  s.milestones.push(s.day + title);
-  MS_QUEUE.push({ title, text });
-  if (document.getElementById('modal-root').classList.contains('open')) return;
-  nextMilestone();
-}
-function nextMilestone() {
-  const m = MS_QUEUE.shift();
-  if (!m) return;
-  openModal(`
-    <div style="text-align:center;padding:14px 8px">
-      <div style="font-size:34px">${esc(m.title.split(' ')[0])}</div>
-      <h2 class="ev-title" style="margin-top:6px">${esc(m.title.replace(/^\S+\s/, ''))}</h2>
-      <p class="ev-text">${esc(m.text)}</p>
-      <div class="ev-choices"><button class="ev-choice" id="msOk"><span class="em">🎉</span><span>계속한다</span></button></div>
-    </div>`, () => {
-    SFX.play('level');
-    $('#msOk').addEventListener('click', () => { closeModal(); setTimeout(nextMilestone, 300); });
-  });
-}
-
-/* ── 인물 명부 · 기록 ─────────────────────────────────────── */
-function renderRoster() {
-  const s = G.state;
-  const ids = ALL_IDS.slice().sort((a, b) => (s.aff[b] || 0) - (s.aff[a] || 0));
-  viewEl().innerHTML = `
-    <div class="sect"><h3>아르덴의 사람들</h3><span>${ids.length}명</span></div>
-    <div class="hint mb6">총 ${ids.length}명이 아르덴을 오간다. 말을 걸고, 선물하고, 신뢰를 쌓자.</div>
-    <div style="display:flex;flex-direction:column;gap:7px">
-      ${ids.map(id => {
-        const c = CHARS[id];
-        const rel = s.rel[id];
-        return `<button class="char-card" data-c="${id}">
-          <img class="px" src="${faceSrc(id)}" ${IMG_FALLBACK} alt="">
-          <div class="cb">
-            <div class="cn"><b>${c.name}</b>${rel ? `<span class="rel ${rel}">${REL_LABEL[rel] || rel}</span>` : ''}${c.romance && !rel ? '<span class="rel">로맨스</span>' : ''}</div>
-            <p>${c.role}</p>
-            <p style="color:var(--dim2)">${TRAITS[c.trait] ? TRAITS[c.trait].name : ''} · 호감 ${s.aff[id] || 0}</p>
-          </div>
-          <div class="cs">${c.romance || rel ? heartsHTML(s.aff[id] || 0) : ''}</div>
-        </button>`;
-      }).join('')}
-    </div>
-    <div style="height:10px"></div>`;
-  viewEl().querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => openChat(b.dataset.c)));
-}
-
-function renderJournal() {
-  const s = G.state;
-  const kids = s.children.map(c => `<div class="kv"><span>${c.sex === '딸' ? '👧' : '👦'} ${c.name || '(이름 없음)'} · ${c.hair} · ${c.stage === 'infant' ? '영아' : '유년'} · ${s.day - c.born}일째</span><b>${CHARS[c.mom].name}의 아이</b></div>
-      ${!c.name ? `<div class="row mt8"><input class="name-input" style="margin:0" placeholder="아이의 이름…" maxlength="8" id="childName_${c.id}"><button class="btn small primary" data-name="${c.id}">이름 지어주기</button></div>` : ''}`).join('');
-  viewEl().innerHTML = `
-    <div class="sect"><h3>영지 연대기</h3><span>${s.year}년차 · D+${s.day - s.startDay}</span></div>
-    <div class="card" style="padding:12px 14px">
-      <div class="kv"><span>영주</span><b>${esc(s.name)}</b></div>
-      <div class="kv"><span>성향</span><b>${repTags(s).join(' · ') || '아직 모습이 없다'} (${repTone(s)})</b></div>
-      <div class="kv"><span>가족</span><b>${residents().map(id => CHARS[id].name).join(', ') || '없다'}</b></div>
-      ${kids ? `<div class="divider"></div>${kids}` : ''}
-      <div class="kv"><span>누적 사건</span><b>${s.logs.length}</b></div>
-    </div>
-    <div class="sect"><h3>기록</h3></div>
-    <div class="card" style="padding:6px 14px">
-      ${s.logs.length ? s.logs.map(l => `<div class="log-item"><span class="ld">D+${l.d - s.startDay}</span><span class="lt">${esc(l.t)}</span></div>`).join('') : '<div class="empty">아직 기록이 없다.</div>'}
-    </div>
-    <div class="mt12"><button class="btn danger wide" id="resetBtn">↺ 처음부터 다시 (기록 삭제)</button></div>
-    <div style="height:10px"></div>`;
-  $('#resetBtn').addEventListener('click', () => {
-    openModal(`<div class="ev-kicker">위험</div><h2 class="ev-title">모든 기록을 지운다</h2><p class="ev-text">영지의 연대기가 사라진다. 되돌릴 수 없다.</p><div class="ev-choices"><button class="ev-choice" id="yesReset"><span class="em">🗑</span><span>지운다</span></button><button class="ev-choice" id="noReset"><span class="em">🤍</span><span>그만둔다</span></button></div>`, () => {
-      $('#yesReset').addEventListener('click', () => { clearSave(); closeModal(); showTitle(); });
-      $('#noReset').addEventListener('click', closeModal);
-    });
-  });
-  viewEl().querySelectorAll('[data-name]').forEach(b => b.addEventListener('click', () => {
-    const c = s.children.find(x => x.id === b.dataset.name);
-    const inp = document.getElementById('childName_' + c.id);
-    const nm = inp && inp.value.trim();
-    if (!nm) { toast('이름을 적어 주세요.', 'bad'); return; }
-    c.name = nm;
-    addLog(`아이의 이름을 ${nm}${josa(nm, '으', '')}로 지었다.`);
-    toast(`👶 ${nm}(이)라고 지었다.`, 'gold');
-    SFX.play('level');
-    saveGame(); render();
-  }));
-}
-
-/* ── 타이틀 ───────────────────────────────────────────────── */
-function showTitle() {
-  G.state = null;
-  showHUD(false); showTabs(false);
-  const saved = loadGame();
-  viewEl().className = 'view center';
-  viewEl().innerHTML = `
-    <div class="title-wrap">
-      <div class="title-bg" style="background-image:url('assets/bg_forest.png')"></div>
-      <div class="title-veil"></div>
-      <div class="title-inner">
-        <div class="title-sprites">
-          <img class="px" src="assets/lord.png" alt="">
-          <img class="px" src="assets/serena.png" alt="">
-          <img class="px" src="assets/mira.png" alt="">
-        </div>
-        <div class="title-crest">— 《외뿔의 악마》 외전 —</div>
-        <h1 class="title-main">레카텐 변경 영주<br>아르덴의 봄</h1>
-        <p class="title-sub">마왕 도래 이전, 신성 타이셀 왕국 북부.<br>영지를 다스리고, 사람을 만나고, 사랑하고, 가족을 이루는 샌드박스.</p>
-        <div class="title-btns">
-          ${saved ? '<button class="btn primary" id="contBtn">▶ 이어서 (${day}일차)</button>'.replace('${day}', saved.day) : ''}
-          <div>
-            <span class="newgame-label">영주의 이름</span>
-            <input class="name-input" id="nameInput" placeholder="아르덴 영주" maxlength="12">
-            <button class="btn ${saved ? 'ghost' : 'primary'} wide" id="startBtn">✦ 새로 시작한다</button>
-          </div>
-        </div>
-        <div class="title-foot">54명의 인물 · 사계절 샌드박스 · 로맨스/결혼/자녀/가신 · 선택지 대화</div>
-      </div>
-    </div>`;
-  const start = () => {
-    const nm = $('#nameInput').value.trim() || '아르덴 영주';
-    if (saved) { /* keep save */ }
-    G.state = defaultState(nm);
-    refreshPrices();
-    genQuests();
-    saveGame();
-    SFX.unlock();
-    SFX.play('day');
-    G.screen = { view: 'map' };
-    render();
-    if (!G.state.tut.seenP && typeof openPrologue === 'function') openPrologue();
-  };
-  $('#startBtn').addEventListener('click', start);
-  const cont = $('#contBtn');
-  if (cont) cont.addEventListener('click', () => {
-    G.state = loadGame();
-    if (!G.state) { toast('저장을 읽을 수 없다.', 'bad'); return; }
-    SFX.unlock();
-    G.screen = { view: 'map' };
-    render();
-  });
-}
-
-/* ── 탭 · 공통 바인딩 ─────────────────────────────────────── */
-function renderTabs() {
-  tabEl().innerHTML = `
-    <button class="tab ${G.screen.view === 'map' || G.screen.view === 'place' ? 'on' : ''}" data-tab="map"><i>🏰</i>영지</button>
-    <button class="tab ${G.screen.view === 'roster' ? 'on' : ''}" data-tab="roster"><i>👤</i>인물</button>
-    <button class="tab ${G.screen.view === 'journal' ? 'on' : ''}" data-tab="journal"><i>📖</i>기록</button>`;
-  tabEl().querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
-    SFX.play('tap');
-    G.screen = { view: b.dataset.tab };
-    render();
-  }));
-}
-
-function bindCommon() {
-  const gb = $('#guideBtn');
-  if (gb) gb.addEventListener('click', () => { SFX.play('open'); openGuide(false); });
-  const m = $('#muteBtn');
-  if (m) m.addEventListener('click', () => { const mu = SFX.toggle(); m.textContent = mu ? '🔇' : '🔊'; });
-  const sl = $('#sleepBtn');
-  if (sl) sl.addEventListener('click', () => openSleep());
-}
-
-/* ── 게임 오버 체크 ───────────────────────────────────────── */
-function checkGameOver() {
-  const s = G.state;
-  if (s.morale <= -60 && !s.flags.revoltWarn) {
-    s.flags.revoltWarn = true;
-    toast('⚠️ 민심이 위험하다. 사람들의 눈빛이 달라졌다.', 'bad');
-  }
-}
-
-/* ── 렌더 라우터 ──────────────────────────────────────────── */
-function render() {
-  if (!G.state) { showTitle(); return; }
-  showHUD(true); showTabs(true);
-  hudEl().innerHTML = hudHTML();
-  renderTabs();
-  bindCommon();
-  const v = G.screen.view;
-  viewEl().className = 'view' + (v === 'place' ? '' : '');
-  if (v === 'map') renderMap();
-  else if (v === 'place') renderPlace();
-  else if (v === 'roster') renderRoster();
-  else if (v === 'journal') renderJournal();
-  else renderMap();
-  saveGame();
-}
-
-/* ── 부팅 ─────────────────────────────────────────────────── */
-function warmFaces() {
-  /* 고유 작화 · base 작화를 미리 받아 둔다(중복 파일은 한 번만). */
-  const files = new Set();
-  ALL_IDS.forEach(id => {
-    files.add(faceSrc(id));
-    files.add(spriteSrc(id));
-  });
-  files.forEach(src => { const im = new Image(); im.src = src; });
-}
-window.addEventListener('load', () => {
-  document.getElementById('boot').classList.add('gone');
-  showTitle();
-  warmFaces();
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (UI.scene) return;               /* 장면은 건너뛸 수 없다 */
+  if ($('#overlay').classList.contains('on')) UI.closeOverlay();
 });
-window.addEventListener('visibilitychange', () => { if (!document.hidden) saveGame(); });
