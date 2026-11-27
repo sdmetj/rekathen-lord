@@ -175,6 +175,50 @@ def clean_specks(img, iters=2):
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
+def despill(rgb, alpha, rounds=8, tol=18):
+    """실루엣 경계에 남은 마젠타 번짐을 '불투명한' 이웃 색으로만 덮는다.
+    투명 영역은 마젠타라서 이웃으로 쓰면 오히려 번진다."""
+    out = rgb.astype(np.float32).copy()
+    opaque = alpha
+    for _ in range(rounds):
+        r, g, b = out[:, :, 0], out[:, :, 1], out[:, :, 2]
+        bad = opaque & ((np.minimum(r, b) - g) > tol)
+        if not bad.any():
+            break
+        good = opaque & ~bad
+        acc = np.zeros_like(out)
+        cnt = np.zeros(out.shape[:2], dtype=np.float32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            nbr = np.roll(np.roll(out, dy, axis=0), dx, axis=1)
+            ok = np.roll(np.roll(good, dy, axis=0), dx, axis=1)
+            acc += nbr * ok[..., None]
+            cnt += ok
+        upd = bad & (cnt > 0)
+        out[upd] = acc[upd] / cnt[upd][:, None]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def fill_outside(rgb, alpha, iters=6):
+    """투명 영역을 가장 가까운 불투명 색으로 채운다.
+    축소(LANCZOS)할 때 마젠타가 실루엣 안으로 섞여 들어오는 것을 막는다."""
+    out = rgb.copy()
+    known = alpha.copy()
+    for _ in range(iters):
+        if known.all():
+            break
+        acc = np.zeros_like(out)
+        cnt = np.zeros(out.shape[:2], dtype=np.float32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            nbr = np.roll(np.roll(out, dy, axis=0), dx, axis=1)
+            kn = np.roll(np.roll(known, dy, axis=0), dx, axis=1)
+            acc += nbr * kn[..., None]
+            cnt += kn
+        upd = (~known) & (cnt > 0)
+        out[upd] = acc[upd] / cnt[upd][:, None]
+        known |= upd
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
 def add_outline(img, colour=(24, 20, 34)):
     a = np.array(img)
     opaque = a[:, :, 3] > 0
@@ -211,6 +255,10 @@ def cutout(src):
 def process_sprite(src, dst, target=(176, 240), outline=True, align="bottom", colors=32, scale=4,
                    color=1.14, contrast=1.06, bright=1.0, top_bias=0.0):
     img, alpha = cutout(src)
+    am = np.array(alpha) > 0
+    rgb = despill(np.array(img), am)
+    rgb = fill_outside(rgb, am)
+    img = Image.fromarray(rgb, "RGB")
     bbox = alpha.getbbox()
     if bbox:
         img, alpha = img.crop(bbox), alpha.crop(bbox)

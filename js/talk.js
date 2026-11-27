@@ -1,29 +1,8 @@
 /* ══════════════════════════════════════════════════════════════
-   대화 엔진 — 프리토크 파서 + 태도 액션 + 하트 이벤트
-   정적 웹에서 입력 문장의 의도·키워드·감정톤을 파싱해
-   성격별 말투(talk 뱅크) + 호감도/신뢰/기분 변화로 응답한다.
+   대화 엔진 — 선택지 대화 + 하트 이벤트 + 질투
+   자유 입력 파서는 걷어냈다. 대사는 인물별 뱅크(voice.js)가 맡고,
+   여기서는 호감도·신뢰 계산과 서사 이벤트만 다룬다.
    ══════════════════════════════════════════════════════════════ */
-
-/* ── 의도 판별 ─────────────────────────────────────────────── */
-const INTENT_PATTERNS = [
-  { intent: 'flirt',   re: /(사랑|예뻐|예쁘다|아름|눈이 가|좋아해|반했|혼자|결혼|입맞춤|키스|안아|손 잡|고백|이뻐|귀엽|매력|설레|그리워|보고 싶|보고싶|데이트|마음을 줄|내 사람|네 편|미인|잘생)/i },
-  { intent: 'praise',  re: /(대단|멋있|훌륭|최고|잘했|잘하|감사|고맙|고마워|덕분|똑똑|영리|명석|칭찬|자랑|폼나|믿음직|갬동|감동|존경)/i },
-  { intent: 'tease',   re: /(놀리|장난|속여|거짓|하하|ㅋㅋ|ㅋㅎ|바보|얼간|조롱|허세|궁예|쪽팔|웃겨|웃기|재밌|재미)/i },
-  { intent: 'comfort', re: /(괜찮|괜찮아|힘내|위로|아무 일|걱정 마|걱정마|쉬어|지쳤|피곤|아파|울어|눈물|안녕|무서|외롭|외로|슬퍼|슬프)/i },
-  { intent: 'secret',  re: /(비밀|숨긴|은밀|밀서|정체|사실|진실|과거|어디서|왔|왜 여기|스가르테론|인장|밀정|은뿔매|은빛매|밀수|짐짓|사실은)/i },
-  { intent: 'work',    re: /(일|일해|부탁|의뢰|일하|일손|일을|순찰|성벽|수비|훈련|훈련|일거리|도와|협조|계약|일당)/i },
-  { intent: 'drink',   re: /(술|한잔|잔|포도주|취하|마셔|음주| 건배|굽)/i },
-  { intent: 'battle',  re: /(싸|싸우|검|전투|출진|토벌|도적|늑대|몬스터|마수|숲|원한|복수|전쟁|무기|훈련)/i },
-  { intent: 'money',   re: /(돈|금화|값|가격|거래|사줘|팔아|세금|월급|급여|수입|빚|이자|후원|투자)/i },
-  { intent: 'faith',   re: /(신|기도|교단|하이레프티아|성당|예배|신앙|축복|십일조|성흔|전례|성녀)/i },
-  { intent: 'threat',  re: /(죽여|죽이|위협|협박|감옥|내쫓|내쫓|추방|경고|무력|참수|고문|파문|벌할|벌하|명령이다)/i },
-];
-
-function detectIntent(text) {
-  for (const p of INTENT_PATTERNS) if (p.re.test(text)) return p.intent;
-  if (/[?？]$/.test(text.trim()) || /(뭐야|뭔데|어때|어떻|누구|언제|어디|왜|뭐 하|뭐해)/.test(text)) return 'ask';
-  return 'neutral';
-}
 
 /* ── 호감도/신뢰 계산 ──────────────────────────────────────── */
 function talkGain(char, intent, state) {
@@ -48,74 +27,6 @@ function talkIdx(state, char, n) {
   const base = state.day * 3 + state.phase + (state.aff[char.id] || 0);
   return Math.abs(base) % n;
 }
-function affLineFor(char, intent, state) {
-  const t = TRAITS[char.trait] || TRAITS.kuudere;
-  const bank = t.talk || {};
-  const arr = bank[intent];
-  if (arr && arr.length) return arr[talkIdx(state, char, arr.length)];
-  return (bank.neutral || ['…….'])[0];
-}
-
-/* ── 프리토크 응답 ─────────────────────────────────────────── */
-function respondFreeTalk(char, text, state) {
-  const intent = detectIntent(text);
-  const t = TRAITS[char.trait] || TRAITS.kuudere;
-  let line, dAff = 0, dTrust = 0, mood = null;
-
-  if (intent === 'threat' && (state.aff[char.id] || 0) > 400) {
-    line = (TRAITS[char.trait].talk.threat || ['……'])[0] || '';
-  }
-  if (!line) line = affLineFor(char, intent, state);
-
-  dAff = talkGain(char, intent, state);
-  dTrust = trustGain(char, intent, state);
-
-  /* 감정톤 보정 */
-  const soft = /(부탁|제발|고마워|미안|사과|잘 부탁)/.test(text);
-  if (soft) dAff += 2;
-  if (/[!！]{2,}|(죽어|꺼져|쓰레기)/.test(text)) { dAff -= 4; mood = 'sour'; }
-  if (intent === 'flirt' && state.aff[char.id] < 150) {
-    dAff = Math.max(1, dAff - 3);
-    line = pickEarlyFlirt(char, state);
-  }
-  if (intent === 'secret' && char.id === 'seraphine') dTrust += 2;
-  if (intent === 'faith' && char.id === 'serena') dTrust += 2;
-
-  /* 기억 플래그 */
-  const mem = [];
-  if (/(아내|부인|여왕|왕비)/.test(text)) mem.push('wife_call');
-  if (/(아이|아기|애|자식)/.test(text)) mem.push('child_talk');
-  if (/(밤|야간|새벽)/.test(text) && intent === 'flirt') mem.push('night_flirt');
-  if (/(죄송|미안)/.test(text)) mem.push('apology');
-  if (mem.includes('apology') && state.mood[char.id] === 'sour') { mood = 'warm'; dAff += 3; }
-  if (mem.includes('wife_call') && (state.rel[char.id] || '') === 'wife') dAff += 4;
-  if (mem.includes('child_talk') && state.children.length) dAff += 3;
-
-  return { line, dAff, dTrust, intent, mood, mem };
-}
-
-function pickEarlyFlirt(char, state) {
-  const t = TRAITS[char.trait] || TRAITS.kuudere;
-  const low = {
-    tsundere: ['뭐, 뭐야. 아직 그런 말 받을 사이 아니라고.', '첫눈에 반했다는 거, 거짓말이지.'],
-    noble: ['값을 매기려면 멀리서부터 다가서는 법이다.', '아직 내 마음의 값을 알지도 못하면서.'],
-    trickster: ['아직 식사도 안 했는데 반해? 이 영지 술이 문제네.', '영주님, 그 말 값이 꽤 나갈 텐데.'],
-    devout: ['그, 그런 말은 좀 더 친해지고 나서요…….', '영주님, 저 아직 준비가…….'],
-    kuudere: ['……아직 아니다. 시간이 필요하다.', '그 말은 기록해 두지 않겠다.'],
-    hotblood: ['뭐, 뭐라고?! 그건 조금 빠르잖아!', '갑자기 무슨 소리야!'],
-    genius: ['논리적 근거가 부족하다. 재판 필요.', '아직 표본이 1일차인데.'],
-    yandere: ['……좋아. 그 말, 못 잊어버렸으면 좋겠어.', '진심이지? 봐, 봐.'],
-    timid: ['저, 저기…… 아직 우리 사이가…….', '영주님, 그런 말씀은…… 무서워요.'],
-    valiant: ['하! 성급하네, 영주님. 술이라도 마시고 하자.', '그런 말은 밤에 해 보시지.'],
-    ambitious: ['매력이 상승세를 타는군요. 지켜보겠습니다.', '빠른 판단이십니다. 다만 저는 조심스럽습니다.'],
-    playful: ['어라, 벌써? 빠르네!', '그 말, 나중에 다시 해 줘. 그땐 더 재밌을 것 같아.'],
-    loyal: ['그, 그런 말씀은…… 부적절합니다. 아뇨, 싫진 않습니다.', '영주님, 술이라도 드셨습니까.'],
-    cynical: ['아직 정보가 부족해. 나중에 다시 팔아 봐.', '썩은 눈이군. 값도 안 나가.'],
-  };
-  const arr = low[char.trait] || ['…….'];
-  return arr[talkIdx(state, char, arr.length)];
-}
-
 /* ── 하트 이벤트 (핵심 인물) ───────────────────────────────── */
 const HEART_STAGES = [2, 4, 6, 8];
 const HEART_EVENTS = {

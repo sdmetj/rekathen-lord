@@ -7,41 +7,21 @@ const viewEl = () => document.getElementById('view');
 const hudEl = () => document.getElementById('hud');
 const tabEl = () => document.getElementById('tabbar');
 
-/* ── 초상화 경로 캐시 ──────────────────────────────────────────
-   색조 변형(tint) 렌더링은 제거했다. 얼굴·눈이 깨져 보이던 원인이었고,
-   지금은 인물별 고유 작화(assets/{sprite}.png / {sprite}_portrait.png)를 쓴다.
-   작화가 아직 없는 변경 인물은 성별이 맞는 base 작화를 그대로 공유한다. */
-const FaceCache = {};
+/* ── 초상화 경로 ──────────────────────────────────────────────
+   54인 전원이 자기 id의 고유 작화를 쓴다. 공유 base 폴백은 폐기했다.
+   assets/{id}.png = 전신, assets/{id}_portrait.png = 초상. */
 /* 작화를 교체할 때 브라우저가 예전 그림을 캐시해 두지 않도록 버전을 붙인다. */
-const ASSET_VER = '29';
+const ASSET_VER = '30';
 const av = p => `${p}?v=${ASSET_VER}`;
 
-/* base는 핵심 인물의 도트 이름일 수도, 다른 변경 인물의 id일 수도 있다.
-   체인 끝까지 따라가 실제 도트(sprite)를 가진 인물을 찾아낸다. */
-function spriteBaseOf(c) {
-  let cur = c, guard = 0;
-  while (cur && !cur.sprite && cur.base && guard++ < 10) cur = CHARS[cur.base];
-  return (cur && cur.sprite) ? cur.sprite : null;
-}
 const IMG_FALLBACK = `onerror="this.onerror=null;this.src='assets/lord.png?v=${ASSET_VER}'"`;
 function faceSrc(id) {
   const c = CHARS[id];
-  if (!c) return av('assets/lord.png');
-  if (c.core) return av(`assets/${c.sprite}_portrait.png`);
-  if (FaceCache[id]) return FaceCache[id];
-  const sb = spriteBaseOf(c);
-  FaceCache[id] = av(sb ? `assets/${sb}_portrait.png` : 'assets/lord.png');
-  return FaceCache[id];
+  return av(c ? `assets/${c.id}_portrait.png` : 'assets/lord.png');
 }
 function spriteSrc(id) {
   const c = CHARS[id];
-  if (!c) return av('assets/lord.png');
-  if (c.core) return av(`assets/${c.sprite}.png`);
-  const key = '_sp_' + id;
-  if (FaceCache[key]) return FaceCache[key];
-  const sb = spriteBaseOf(c);
-  FaceCache[key] = av(sb ? `assets/${sb}.png` : 'assets/lord.png');
-  return FaceCache[key];
+  return av(c ? `assets/${c.id}.png` : 'assets/lord.png');
 }
 function bodyArt(id) { return av('assets/wolf.png'); }
 
@@ -68,6 +48,7 @@ function hudHTML() {
     </div>
     <div class="hud-date">
       <div class="chip-date"><b>${s.year}년차 ${s.dayOfSeason}일</b><span>${w.icon} ${w.name}</span></div>
+      <button class="chip-date" id="guideBtn" style="font-size:12px;padding:6px 9px">? 가이드</button>
       <button class="chip-date" id="muteBtn" style="font-size:14px">${SFX.isMuted() ? '🔇' : '🔊'}</button>
     </div>
   </div>
@@ -202,6 +183,7 @@ function renderMap() {
     return true;
   });
   viewEl().innerHTML = `
+    ${typeof tutorialBanner === 'function' ? tutorialBanner() : ''}
     <div class="map-card fade">
       <div class="map-topinfo">
         <span class="weather-pill">${w.icon} ${w.name}</span>
@@ -234,6 +216,8 @@ function renderMap() {
     </div>`;
   viewEl().querySelectorAll('[data-place]').forEach(b =>
     b.addEventListener('click', () => { SFX.play('open'); G.screen = { view: 'place', place: b.dataset.place }; render(); }));
+  const tb = $('#tutBanner');
+  if (tb) tb.addEventListener('click', () => { SFX.play('open'); openGuide(false); });
   bindCommon();
 }
 
@@ -321,6 +305,7 @@ function pickRumor() {
 function renderPlace() {
   const s = G.state;
   const p = PLACES.find(x => x.id === G.screen.place);
+  if (typeof tutMark === 'function') tutMark('visit');
   const acts = placeActions(p.id);
   const ppl = presentAt(p.id);
   viewEl().innerHTML = `
@@ -401,22 +386,17 @@ function openChat(id) {
       <div class="log" id="chatLog"></div>
       <div class="chat-dock">
         <div class="chips" id="chatChips"></div>
+        <div class="choices" id="chatChoices"></div>
         <div class="quick-gifts" id="giftRow"></div>
-        <div class="input-row" style="margin-top:6px">
-          <input id="chatInput" type="text" placeholder="${c.name}에게 직접 말 걸기…" maxlength="80">
-          <button class="send" id="chatSend">↑</button>
-        </div>
       </div>
     </div>`;
   document.body.appendChild(el);
   const log = el.querySelector('#chatLog');
   pushMsg('narr', `${josa(c.name, '과', '와')}의 대화. 처음 듣는 말투, 처음 보는 눈빛.`);
-  pushMsg('them', TRAITS[c.trait].talk.neutral[0]);
+  pushMsg('them', voiceLine(c, 'greet', s), c.name);
   renderChips();
   renderGifts();
   $('#chatBack').addEventListener('click', closeChat);
-  $('#chatSend').addEventListener('click', sendFreeTalk);
-  $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendFreeTalk(); });
 }
 function closeChat() {
   const el = $('#chatView');
@@ -446,36 +426,74 @@ function chatBusy(ms) {
   });
 }
 
-const TONE_CHIPS = [
-  { k: 'praise', label: '칭찬하기' }, { k: 'flirt', label: '다정하게', hot: true },
-  { k: 'tease', label: '놀리기' }, { k: 'comfort', label: '위로하기' },
-  { k: 'secret', label: '비밀 묻기' }, { k: 'work', label: '일 이야기' },
-  { k: 'drink', label: '술자리' }, { k: 'battle', label: '전투 이야기' },
-  { k: 'money', label: '돈 이야기' }, { k: 'faith', label: '신앙 이야기' },
-];
+/* 선택지 → 의도(호감도 계산용) */
+const TOPIC_INTENT = { greet: 'comfort', work: 'work', praise: 'praise', tease: 'tease', personal: 'secret', deep: 'secret', flirt: 'flirt' };
+const TOPIC_ACTION = {
+  greet: '가볍게 안부를 묻는다.',
+  work: '요즘 어떻게 지내는지 물었다.',
+  praise: '솔직하게 칭찬했다.',
+  tease: '가볍게 장난을 건다.',
+  personal: '개인적인 이야기를 조심스레 꺼낸다.',
+  deep: '마음속에 있는 이야기를 꺼낸다.',
+  flirt: '조금 다정하게, 마음을 전한다.',
+};
+const TOPIC_BONUS = { greet: 2, work: 1, praise: 0, tease: 0, personal: 2, deep: 4, flirt: 0 };
+
+/* 인물별 대사 — 없으면 성격 공통 뱅크로 폴백 */
+function voiceLine(c, kind, s) {
+  const bank = (typeof VOICE !== 'undefined') ? VOICE[c.id] : null;
+  const arr = bank && bank[kind];
+  if (arr && arr.length) {
+    const idx = Math.abs(s.day * 3 + s.phase + (s.aff[c.id] || 0) + kind.length) % arr.length;
+    return arr[idx];
+  }
+  const t = TRAITS[c.trait] || TRAITS.kuudere;
+  const fall = { greet: t.talk.neutral, work: t.talk.work, praise: t.talk.praise,
+    tease: t.talk.tease, personal: t.talk.secret, deep: t.talk.secret, flirt: t.talk.flirt }[kind] || t.talk.neutral;
+  return pick(fall);
+}
+
+/* 지금 이 사람과 나눌 수 있는 대화 — 장소·호감도에 맞춰 3~5개 */
+function chatTopics(c, s) {
+  const aff = s.aff[c.id] || 0;
+  const list = [
+    { k: 'greet', label: '안부를 묻는다' },
+    { k: 'work', label: WORK_LABEL[c.place] || '요즘 어떻게 지내나' },
+  ];
+  if (c.romance && aff >= 600 && !s.rel[c.id]) list.push({ k: 'flirt', label: '마음을 전한다', hot: true });
+  else list.push({ k: 'praise', label: '칭찬한다' });
+  list.push({ k: 'tease', label: '가볍게 놀린다' });
+  if (aff >= 500) list.push({ k: 'deep', label: '마음속 이야기를 꺼낸다', hot: true });
+  else if (aff >= 200) list.push({ k: 'personal', label: '개인적인 이야기를 묻는다' });
+  return list;
+}
 
 function renderChips() {
   const s = G.state;
   const c = CHARS[CHAT.id];
-  const box = $('#chatChips');
+  const box = $('#chatChoices');
   if (!box) return;
-  let html = TONE_CHIPS.map(t => `<button class="tchip ${t.hot ? 'hot' : ''}" data-tone="${t.k}">${t.label}</button>`).join('');
-  if (s.mood[c.id] === 'sour') html = `<button class="tchip" data-tone="comfort">사과하기</button>` + html;
+  const aff = s.aff[c.id] || 0;
+  box.innerHTML = chatTopics(c, s).map(o =>
+    `<button class="choice ${o.hot ? 'hot' : ''}" data-ch="${o.k}"><span>${o.label}</span><i>›</i></button>`).join('')
+    + (aff < 200 ? `<div class="choice-hint">호감도 200 — 개인적인 이야기 · 500 — 마음속 이야기가 열립니다</div>` : '');
+  box.querySelectorAll('[data-ch]').forEach(b => b.addEventListener('click', () => chatChoose(b.dataset.ch)));
+
+  /* 특수 행동 */
+  const sp = $('#chatChips');
+  if (!sp) return;
+  let html = '';
+  if (s.mood[c.id] === 'sour') html += `<button class="tchip" data-tone="comfort">사과하기</button>`;
   const conf = canConfess(c.id);
-  if (c.romance && !s.rel[c.id] && (s.aff[c.id] || 0) >= 600) {
+  if (c.romance && !s.rel[c.id] && aff >= 600) {
     html += `<button class="tchip hot" data-tone="confess">♡ 고백${conf.ok ? '' : ` (${conf.why})`}</button>`;
   }
-  if (s.rel[c.id] === 'lover' || s.rel[c.id] === 'concubine') {
-    html += `<button class="tchip" data-tone="marry">💍 프로포즈</button>`;
-  }
-  if (!c.core) {
-    html += `<button class="tchip" data-tone="recruit">🤝 가신으로</button>`;
-  }
-  if (s.rel[c.id] === 'wife' || s.rel[c.id] === 'concubine') {
-    html += `<button class="tchip" data-tone="home">🏠 같이 있기</button>`;
-  }
-  box.innerHTML = html;
-  box.querySelectorAll('[data-tone]').forEach(b => b.addEventListener('click', () => handleTone(b.dataset.tone)));
+  if (s.rel[c.id] === 'lover' || s.rel[c.id] === 'concubine') html += `<button class="tchip" data-tone="marry">💍 프로포즈</button>`;
+  if (!c.core) html += `<button class="tchip" data-tone="recruit">🤝 가신으로</button>`;
+  if (s.rel[c.id] === 'wife' || s.rel[c.id] === 'concubine') html += `<button class="tchip" data-tone="home">🏠 같이 있기</button>`;
+  sp.innerHTML = html;
+  sp.style.display = html ? '' : 'none';
+  sp.querySelectorAll('[data-tone]').forEach(b => b.addEventListener('click', () => handleTone(b.dataset.tone)));
 }
 
 function renderGifts() {
@@ -483,8 +501,34 @@ function renderGifts() {
   const row = $('#giftRow');
   if (!row) return;
   const gifts = Object.keys(s.items).filter(k => s.items[k] > 0 && ITEMS[k] && ITEMS[k].base <= 100);
-  row.innerHTML = gifts.map(k => `<button class="tchip" data-gift="${k}">${ITEMS[k].icon} ${ITEMS[k].name} ×${s.items[k]}</button>`).join('') || '<span class="mini">줄 만한 물건이 없다.</span>';
+  row.innerHTML = `<span class="gift-label">선물</span>` + (gifts.map(k => `<button class="tchip" data-gift="${k}">${ITEMS[k].icon} ${ITEMS[k].name} ×${s.items[k]}</button>`).join('') || '<span class="mini">줄 만한 물건이 없다.</span>');
   row.querySelectorAll('[data-gift]').forEach(b => b.addEventListener('click', () => giveGift(b.dataset.gift)));
+}
+
+/* 선택지 하나를 고른다 */
+function chatChoose(kind) {
+  if (CHAT.busy) return;
+  const s = G.state;
+  const c = CHARS[CHAT.id];
+  const intent = TOPIC_INTENT[kind] || 'neutral';
+  if (typeof tutMark === 'function') tutMark('talk');
+  CHAT.busy = true;
+  pushMsg('me', TOPIC_ACTION[kind] || '말을 건넨다.');
+  chatBusy(680).then(() => {
+    const repeat = s.flags['_topic_' + kind] === s.day;  /* 같은 화제를 하루에 되풀이하면 값이 줄어든다 */
+    s.flags['_topic_' + kind] = s.day;
+    let gain = talkGain(c, intent, s) + (TOPIC_BONUS[kind] || 0);
+    let tg = trustGain(c, intent, s);
+    if (repeat) { gain = Math.max(0, Math.round(gain * 0.4)); tg = 0; }
+    addAff(c.id, gain); addTrust(c.id, tg);
+    s.lastTalk[c.id] = s.day;
+    const line = voiceLine(c, kind, s);
+    pushMsg('them', line, c.name);
+    if (gain >= 8) pushMsg('system', `♡ ${c.name}의 호감도가 크게 올랐다 (+${gain})`);
+    else if (gain > 0) pushMsg('system', `호감도 +${gain}${tg ? ` · 신뢰 +${tg}` : ''}`);
+    if (kind === 'deep' || kind === 'personal') s.memories[c.id] = (s.memories[c.id] || []).concat(kind).slice(-6);
+    afterChatStep(c, intent);
+  });
 }
 
 function handleTone(tone) {
@@ -499,48 +543,16 @@ function handleTone(tone) {
     addAff(c.id, 15); s.morale = clamp(s.morale + 2, -100, 100);
     return;
   }
-  const talk = { praise: '그렇게 잘했다고 칭찬한다.', flirt: '조금 다정하게 다가간다.', tease: '가볍게 놀린다.', comfort: '위로의 말을 건넨다.', secret: '숨겨둔 이야기를 캐묻는다.', work: '영지의 일을 이야기한다.', drink: '한잔 하자고 권한다.', battle: '검과 전투 이야기를 꺼낸다.', money: '돈 이야기를 꺼낸다.', faith: '신과 기도 이야기를 꺼낸다.', comfort2: '' };
-  CHAT.busy = true;
-  pushMsg('me', talk[tone] || '말을 건넨다.');
-  chatBusy(650).then(() => {
-    const lastKey = '_tone_' + tone;
-    const bonus = s.flags[lastKey] === s.day ? 0.4 : 1;
-    s.flags[lastKey] = s.day;
-    const gain = Math.round(talkGain(c, tone, s) * bonus);
-    const tg = Math.round(trustGain(c, tone, s) * bonus);
-    addAff(c.id, gain); addTrust(c.id, tg);
-    s.lastTalk[c.id] = s.day;
-    const line = TRAITS[c.trait].talk[tone] ? pick(TRAITS[c.trait].talk[tone]) : TRAITS[c.trait].talk.neutral[0];
-    pushMsg('them', line, c.name);
-    if (gain >= 8) pushMsg('system', `♡ ${c.name}의 호감도가 크게 올랐다 (+${gain})`);
-    else if (gain < 0) pushMsg('system', `${c.name}의 표정이 굳었다 (${gain})`);
-    afterChatStep(c, tone);
-  });
-}
-
-function sendFreeTalk() {
-  if (CHAT.busy) return;
-  const inp = $('#chatInput');
-  const text = inp.value.trim();
-  if (!text) return;
-  inp.value = '';
-  const s = G.state;
-  const c = CHARS[CHAT.id];
-  CHAT.busy = true;
-  pushMsg('me', text);
-  chatBusy(700).then(() => {
-    const r = respondFreeTalk(c, text, s);
-    addAff(c.id, r.dAff); addTrust(c.id, r.dTrust);
-    s.lastTalk[c.id] = s.day;
-    if (r.mood) s.mood[c.id] = r.mood;
-    let line = r.line;
-    if (r.mem && r.mem.includes('wife_call') && s.rel[c.id] === 'wife') line = '…아내라니, 그 호칭은 계속 쓰게 되겠지. 계속 해.';
-    pushMsg('them', line, c.name);
-    if (r.dAff >= 8) pushMsg('system', `♡ 호감도 +${r.dAff}${r.dTrust ? ` · 신뢰 +${r.dTrust}` : ''}`);
-    else if (r.dTrust > 0) pushMsg('system', `신뢰 +${r.dTrust}`);
-    if (r.mem && r.mem.length) s.memories[c.id] = (s.memories[c.id] || []).concat(r.mem).slice(-6);
-    afterChatStep(c, r.intent);
-  });
+  if (tone === 'comfort') {
+    CHAT.busy = true;
+    pushMsg('me', '어제 일은 미안했다고, 천천히 말을 꺼낸다.');
+    chatBusy(600).then(() => {
+      s.mood[c.id] = 'warm';
+      pushMsg('them', voiceLine(c, 'greet', s), c.name);
+      pushMsg('system', '기분이 풀린 것 같다.');
+      afterChatStep(c, 'comfort');
+    });
+  }
 }
 
 function giveGift(itemId) {
@@ -781,6 +793,7 @@ const SHEETS = {
         const bp = buyPrice(id);
         if (s.gold < bp) { toast('금화가 부족하다.', 'bad'); return; }
         s.gold -= bp; s.items[id] = (s.items[id] || 0) + 1;
+        if (typeof tutMark === 'function') tutMark('dev');
         SFX.play('coin'); toast(`${ITEMS[id].name} 구매 -${bp}금`, 'gold');
         saveGame(); SHEETS.trade(); render();
       }));
@@ -1183,6 +1196,7 @@ function showTitle() {
     SFX.play('day');
     G.screen = { view: 'map' };
     render();
+    if (!G.state.tut.seenP && typeof openPrologue === 'function') openPrologue();
   };
   $('#startBtn').addEventListener('click', start);
   const cont = $('#contBtn');
@@ -1209,6 +1223,8 @@ function renderTabs() {
 }
 
 function bindCommon() {
+  const gb = $('#guideBtn');
+  if (gb) gb.addEventListener('click', () => { SFX.play('open'); openGuide(false); });
   const m = $('#muteBtn');
   if (m) m.addEventListener('click', () => { const mu = SFX.toggle(); m.textContent = mu ? '🔇' : '🔊'; });
   const sl = $('#sleepBtn');

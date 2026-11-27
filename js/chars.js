@@ -1,7 +1,6 @@
 /* ══════════════════════════════════════════════════════════════
    인물 명부 — 핵심 네임드 13인 + 변경 인물 41인 = 54인
-   핵심 인물은 전용 도트(assets/{sprite}.png · {sprite}_portrait.png)를 쓴다.
-   변경 인물은 작화가 없는 동안 성별이 맞는 base 도트를 공유한다(색조 변형 없음).
+   54인 전원이 자기 id의 도트(assets/{id}.png · {id}_portrait.png)를 쓴다.
    ══════════════════════════════════════════════════════════════ */
 
 /* tint: [hueShift, satMul, valShift] — 캔버스 팔레트 스왑용 */
@@ -99,56 +98,57 @@ const CORE_CHARS = {
   },
 };
 
-/* 변경 인물 41인 — base: 작화가 생기기 전까지 쓰는 도트 베이스(성별 일치), tint: 고유 작화 제작용 색 기준값(렌더에는 쓰지 않음) */
+/* 변경 인물 41인 — 전원 자기 고유 작화(assets/{id}.png · {id}_portrait.png)를 쓴다.
+   gend 는 대사·호칭 검수용 표식. base 공유 폴백은 폐기했다. */
 const MINOR_CHARS = [
   // 성채 · 집무실
-  { id: 'hedwyn',  name: '헤드윈',  role: '집무실 시종',      place: 'castle', base: 'taron',     tint: [-140, .9, .05],  trait: 'playful',  gift: 'candy',  desc: '장부보다 문학을 좋아하는 젊은 시종.' },
-  { id: 'greta',   name: '그레타',  role: '회계관',          place: 'castle', base: 'seraphine', tint: [30, .5, -.08],   trait: 'kuudere',  gift: 'book',   desc: '숫자 이외의 말은 낭비라 여긴다.' },
-  { id: 'oskar',   name: '오스카',  role: '성문 위수장',      place: 'castle', base: 'kael',      tint: [-60, .7, 0],     trait: 'loyal',    gift: 'wine',   desc: '스무 해 성문을 지킨 노 위수장.' },
-  { id: 'tilly',   name: '틸리',    role: '전령 소녀',        place: 'castle', base: 'claire',    tint: [45, 1.1, .1],    trait: 'playful',  gift: 'candy',  desc: '성 계단을 세 칸씩 뛰어 오르는 전령.' },
-  { id: 'mordecai',name: '모르데카이',role: '왕국 순사관',     place: 'castle', base: 'sgarteron', tint: [-30, .4, -.1],   trait: 'ambitious',gift: 'book',   desc: '왕도에서 온 순사관. 서류 냄새가 난다.' },
-  { id: 'yuna',    name: '유나',    role: '영빈관 하녀장',     place: 'castle', base: 'serena',    tint: [-100, .8, 0],    trait: 'timid',    gift: 'flower', desc: '저택의 빗자루와 명복인.' },
-  { id: 'brann',   name: '브란',    role: '마부',            place: 'castle', base: 'kael',      tint: [20, .8, -.05],   trait: 'hotblood', gift: 'wine',   desc: '말 네 필과 자기 목숨을 같이 괸다.' },
+  { id: 'hedwyn',  name: '헤드윈',  role: '집무실 시종',      place: 'castle', gend: 'm',  trait: 'playful',  gift: 'candy',  desc: '장부보다 문학을 좋아하는 젊은 시종.' },
+  { id: 'greta',   name: '그레타',  role: '회계관',          place: 'castle', gend: 'f',   trait: 'kuudere',  gift: 'book',   desc: '숫자 이외의 말은 낭비라 여긴다.' },
+  { id: 'oskar',   name: '오스카',  role: '성문 위수장',      place: 'castle', gend: 'm',     trait: 'loyal',    gift: 'wine',   desc: '스무 해 성문을 지킨 노 위수장.' },
+  { id: 'tilly',   name: '틸리',    role: '전령 소녀',        place: 'castle', gend: 'f',    trait: 'playful',  gift: 'candy',  desc: '성 계단을 세 칸씩 뛰어 오르는 전령.' },
+  { id: 'mordecai',name: '모르데카이',role: '왕국 순사관',     place: 'castle', gend: 'm',   trait: 'ambitious',gift: 'book',   desc: '왕도에서 온 순사관. 서류 냄새가 난다.' },
+  { id: 'yuna',    name: '유나',    role: '영빈관 하녀장',     place: 'castle', gend: 'f',    trait: 'timid',    gift: 'flower', desc: '저택의 빗자루와 명복인.' },
+  { id: 'brann',   name: '브란',    role: '마부',            place: 'castle', gend: 'm',   trait: 'hotblood', gift: 'wine',   desc: '말 네 필과 자기 목숨을 같이 괸다.' },
   // 상회 · 상인
-  { id: 'tobin',   name: '토빈',    role: '곡물 상인',        place: 'shop',   base: 'taron',     tint: [-40, .9, 0],     trait: 'trickster',gift: 'wine',   desc: '저울 눈금이 늘 관대하다. 자기 쪽으로.' },
-  { id: 'sela',    name: '셀라',    role: '린넨 장수 아주머니',place: 'shop',   base: 'mill',      tint: [80, .6, .05],    trait: 'valiant',  gift: 'cloth',  desc: '아르덴 린넨의 명수. 팔면서 노래한다.' },
-  { id: 'victor',  name: '빅터',    role: '비아 거래 중개인',  place: 'shop',   base: 'kael',      tint: [140, .5, -.06],  trait: 'cynical',  gift: 'wine',   desc: '중개 수수료로 검을 샀다는 소문.' },
-  { id: 'nemi',    name: '네미',    role: '겨울 매화 파는 아이',place: 'shop',  base: 'claire',    tint: [-150, 1.1, .08], trait: 'playful',  gift: 'flower', desc: '눈 속 꽃을 꺾어 파는 꼬마.' },
-  { id: 'hugo',    name: '휴고',    role: '대장간 머슴',       place: 'shop',   base: 'taron',     tint: [10, 1.0, .05],   trait: 'hotblood', gift: 'candy',  desc: '망치 소리로 아침을 알린다.' },
-  { id: 'iris',    name: '아이리스', role: '향료 상인',        place: 'shop',   base: 'serena',    tint: [60, .9, 0],      trait: 'tsundere', gift: 'ribbon', desc: '남부 향료와 도도한 말투.' },
-  { id: 'dane',    name: '데이네',  role: '낡은 서적 상인',    place: 'shop',   base: 'sgarteron', tint: [-120, .5, -.05], trait: 'genius',   gift: 'book',   desc: '금서 한 권에 인생을 걸었다.' },
+  { id: 'tobin',   name: '토빈',    role: '곡물 상인',        place: 'shop',   gend: 'm',     trait: 'trickster',gift: 'wine',   desc: '저울 눈금이 늘 관대하다. 자기 쪽으로.' },
+  { id: 'sela',    name: '셀라',    role: '린넨 장수 아주머니',place: 'shop',   gend: 'f',    trait: 'valiant',  gift: 'cloth',  desc: '아르덴 린넨의 명수. 팔면서 노래한다.' },
+  { id: 'victor',  name: '빅터',    role: '비아 거래 중개인',  place: 'shop',   gend: 'm',  trait: 'cynical',  gift: 'wine',   desc: '중개 수수료로 검을 샀다는 소문.' },
+  { id: 'nemi',    name: '네미',    role: '겨울 매화 파는 아이',place: 'shop',  gend: 'f', trait: 'playful',  gift: 'flower', desc: '눈 속 꽃을 꺾어 파는 꼬마.' },
+  { id: 'hugo',    name: '휴고',    role: '대장간 머슴',       place: 'shop',   gend: 'm',   trait: 'hotblood', gift: 'candy',  desc: '망치 소리로 아침을 알린다.' },
+  { id: 'iris',    name: '아이리스', role: '향료 상인',        place: 'shop',   gend: 'f',      trait: 'tsundere', gift: 'ribbon', desc: '남부 향료와 도도한 말투.' },
+  { id: 'dane',    name: '데이네',  role: '낡은 서적 상인',    place: 'shop',   gend: 'm', trait: 'genius',   gift: 'book',   desc: '금서 한 권에 인생을 걸었다.' },
   // 성당 · 교단
-  { id: 'ansel',   name: '안셀',    role: '크렌 교구 사제',    place: 'chapel', base: 'taron',     tint: [-70, .3, .04],   trait: 'devout',   gift: 'flower', desc: '병자의 침상을 지키는 사제.' },
-  { id: 'maren',   name: '마렌',    role: '수녀장',           place: 'chapel', base: 'serena',    tint: [160, .4, -.04],  trait: 'valiant',  gift: 'flower', desc: '기도와 흥정을 함께 배운 수녀장.' },
-  { id: 'pilot',   name: '필라르',  role: '십일조 징수원',     place: 'chapel', base: 'sgarteron', tint: [-90, .3, .0],    trait: 'ambitious',gift: 'book',   desc: '곡식 한 스웁도 장부에 남긴다.' },
-  { id: 'cassia',  name: '카시아',  role: '성가대 소녀',       place: 'chapel', base: 'claire',    tint: [-30, 1.0, .06],  trait: 'timid',    gift: 'flower', desc: '성가대에서 혼자 소리가 커진다.' },
-  { id: 'jerome',  name: '제롬',    role: '파문 서기',         place: 'chapel', base: 'dorun',     tint: [-150, .3, -.03], trait: 'cynical',  gift: 'book',   desc: '파문장을 쓰다 지쳐 철학을 했다.' },
-  { id: 'lua',     name: '루아',    role: '고아원 누나',       place: 'chapel', base: 'mill',      tint: [-40, .7, .05],   trait: 'devout',   gift: 'candy',  desc: '열두 아이의 밥과 기도를 챙긴다.' },
+  { id: 'ansel',   name: '안셀',    role: '크렌 교구 사제',    place: 'chapel', gend: 'm',   trait: 'devout',   gift: 'flower', desc: '병자의 침상을 지키는 사제.' },
+  { id: 'maren',   name: '마렌',    role: '수녀장',           place: 'chapel', gend: 'f',  trait: 'valiant',  gift: 'flower', desc: '기도와 흥정을 함께 배운 수녀장.' },
+  { id: 'pilot',   name: '필라르',  role: '십일조 징수원',     place: 'chapel', gend: 'm',    trait: 'ambitious',gift: 'book',   desc: '곡식 한 스웁도 장부에 남긴다.' },
+  { id: 'cassia',  name: '카시아',  role: '성가대 소녀',       place: 'chapel', gend: 'f',  trait: 'timid',    gift: 'flower', desc: '성가대에서 혼자 소리가 커진다.' },
+  { id: 'jerome',  name: '제롬',    role: '파문 서기',         place: 'chapel', gend: 'm', trait: 'cynical',  gift: 'book',   desc: '파문장을 쓰다 지쳐 철학을 했다.' },
+  { id: 'lua',     name: '루아',    role: '고아원 누나',       place: 'chapel', gend: 'f',   trait: 'devout',   gift: 'candy',  desc: '열두 아이의 밥과 기도를 챙긴다.' },
   // 공방
-  { id: 'wren',    name: '렌',      role: '클레어의 견습',     place: 'workshop', base: 'dorun',   tint: [90, .8, .03],    trait: 'timid',    gift: 'candy',  desc: '증류기 앞에서 잠든다.' },
-  { id: 'sable',   name: '세이블',  role: '향수 제조인',       place: 'workshop', base: 'seraphine', tint: [-160, .8, 0],  trait: 'kuudere',  gift: 'flower', desc: '냄새로 사람 기분을 읽는다.' },
-  { id: 'otto',    name: '오토',    role: '유리 세공사',       place: 'workshop', base: 'hedwyn',  tint: [50, .9, 0],      trait: 'genius',   gift: 'candy',  desc: '시험관을 불어 만든다. 손끝이 예술.' },
-  { id: 'petra',   name: '페트라',  role: '압착기 관리인',     place: 'workshop', base: 'mill',    tint: [-100, .6, -.05], trait: 'hotblood', gift: 'wine',   desc: '기계 고장 나면 소리부터 지른다.' },
+  { id: 'wren',    name: '렌',      role: '클레어의 견습',     place: 'workshop', gend: 'f',    trait: 'timid',    gift: 'candy',  desc: '증류기 앞에서 잠든다.' },
+  { id: 'sable',   name: '세이블',  role: '향수 제조인',       place: 'workshop', gend: 'f',  trait: 'kuudere',  gift: 'flower', desc: '냄새로 사람 기분을 읽는다.' },
+  { id: 'otto',    name: '오토',    role: '유리 세공사',       place: 'workshop', gend: 'm',      trait: 'genius',   gift: 'candy',  desc: '시험관을 불어 만든다. 손끝이 예술.' },
+  { id: 'petra',   name: '페트라',  role: '압착기 관리인',     place: 'workshop', gend: 'f', trait: 'hotblood', gift: 'wine',   desc: '기계 고장 나면 소리부터 지른다.' },
   // 주점
-  { id: 'brix',    name: '브릭스',  role: "주점 주인",        place: 'tavern', base: 'mill',      tint: [25, 1.0, -.02],  trait: 'valiant',  gift: 'wine',   desc: "'은빛 뿔'의 여장부. 술값은 정직." },
-  { id: 'corvin',  name: '코빈',    role: '음유시인',         place: 'tavern', base: 'taron',     tint: [-130, .9, .04],  trait: 'playful',  gift: 'wine',   desc: '오늘의 영주를 노래로 만든다.' },
-  { id: 'junko',   name: '준코',    role: '떠돌이 점쟁이',     place: 'tavern', base: 'seraphine', tint: [120, .7, .02],   trait: 'genius',   gift: 'wine',   desc: '손금보다 주사위를 믿는다.' },
-  { id: 'gam',     name: '갬',      role: '내기 관리인',       place: 'tavern', base: 'brann',     tint: [-50, .4, -.06],  trait: 'trickster',gift: 'wine',   desc: '주사위에 손가락이 여섯 개 있다는 소문.' },
-  { id: 'lyra',    name: '릴라',    role: '종업원 겸 심부름',  place: 'tavern', base: 'nemi',      tint: [-110, 1.0, .05], trait: 'tsundere', gift: 'candy',  desc: '잔을 깨뜨려도 씩씩하다.' },
-  { id: 'marlo',   name: '말로',    role: '떠돌이 광대',       place: 'tavern', base: 'corvin',    tint: [70, .8, 0],      trait: 'playful',  gift: 'candy',  desc: '웃기려다 늘 혼난다.' },
+  { id: 'brix',    name: '브릭스',  role: "주점 주인",        place: 'tavern', gend: 'f',  trait: 'valiant',  gift: 'wine',   desc: "'은빛 뿔'의 여장부. 술값은 정직." },
+  { id: 'corvin',  name: '코빈',    role: '음유시인',         place: 'tavern', gend: 'm',  trait: 'playful',  gift: 'wine',   desc: '오늘의 영주를 노래로 만든다.' },
+  { id: 'junko',   name: '준코',    role: '떠돌이 점쟁이',     place: 'tavern', gend: 'f',   trait: 'genius',   gift: 'wine',   desc: '손금보다 주사위를 믿는다.' },
+  { id: 'gam',     name: '갬',      role: '내기 관리인',       place: 'tavern', gend: 'm',  trait: 'trickster',gift: 'wine',   desc: '주사위에 손가락이 여섯 개 있다는 소문.' },
+  { id: 'lyra',    name: '릴라',    role: '종업원 겸 심부름',  place: 'tavern', gend: 'f', trait: 'tsundere', gift: 'candy',  desc: '잔을 깨뜨려도 씩씩하다.' },
+  { id: 'marlo',   name: '말로',    role: '떠돌이 광대',       place: 'tavern', gend: 'm',      trait: 'playful',  gift: 'candy',  desc: '웃기려다 늘 혼난다.' },
   // 검은숲 · 노동
-  { id: 'gorm',    name: '고름',    role: '벌목꾼',           place: 'forest', base: 'kael',      tint: [30, .6, .02],    trait: 'hotblood', gift: 'wine',   desc: '도끼질 한 번에 눈이 흩날린다.' },
-  { id: 'talia',   name: '탈리아',  role: '약초 채집인',       place: 'forest', base: 'claire',    tint: [-45, .9, .05],   trait: 'timid',    gift: 'flower', desc: '어느 약초가 어디 피는지 다 안다.' },
-  { id: 'rowan',   name: '로완',    role: '사냥꾼 반장',       place: 'forest', base: 'kael',      tint: [-90, .5, -.04],  trait: 'loyal',    gift: 'wine',   desc: '발자국으로 사람 나이를 읽는다.' },
-  { id: 'bess',    name: '베스',    role: '덫 치는 여인',      place: 'forest', base: 'mill',      tint: [100, .7, .03],   trait: 'valiant',  gift: 'pelt',   desc: '덫보다 혀가 더 날카롭다.' },
-  { id: 'nils',    name: '닐스',    role: '숲 초소 병사',      place: 'forest', base: 'brann',     tint: [150, .3, -.03],  trait: 'loyal',    gift: 'candy',  desc: '겨울에도 장갑을 끼지 않는다.' },
-  { id: 'echo',    name: '에코',    role: '떠돌이 사냥개 조련사',place: 'forest', base: 'lyra',    tint: [-140, .5, 0],    trait: 'tsundere', gift: 'pelt',   desc: '개 네 마리와 말 한 마디.' },
+  { id: 'gorm',    name: '고름',    role: '벌목꾼',           place: 'forest', gend: 'm',    trait: 'hotblood', gift: 'wine',   desc: '도끼질 한 번에 눈이 흩날린다.' },
+  { id: 'talia',   name: '탈리아',  role: '약초 채집인',       place: 'forest', gend: 'f',   trait: 'timid',    gift: 'flower', desc: '어느 약초가 어디 피는지 다 안다.' },
+  { id: 'rowan',   name: '로완',    role: '사냥꾼 반장',       place: 'forest', gend: 'm',  trait: 'loyal',    gift: 'wine',   desc: '발자국으로 사람 나이를 읽는다.' },
+  { id: 'bess',    name: '베스',    role: '덫 치는 여인',      place: 'forest', gend: 'f',   trait: 'valiant',  gift: 'pelt',   desc: '덫보다 혀가 더 날카롭다.' },
+  { id: 'nils',    name: '닐스',    role: '숲 초소 병사',      place: 'forest', gend: 'm',  trait: 'loyal',    gift: 'candy',  desc: '겨울에도 장갑을 끼지 않는다.' },
+  { id: 'echo',    name: '에코',    role: '떠돌이 사냥개 조련사',place: 'forest', gend: 'f',    trait: 'tsundere', gift: 'pelt',   desc: '개 네 마리와 말 한 마디.' },
   // 떠돌이 · 손님
-  { id: 'ash',     name: '애쉬',    role: '아르카디아 유학 마법사',place: 'tavern', base: 'ellen',   tint: [80, .9, .03],    trait: 'genius',   gift: 'book',   desc: '마나 이론을 술로 설명한다.' },
-  { id: 'viv',     name: '비브',    role: '연맹 악사',         place: 'tavern', base: 'mira',      tint: [-70, 1.1, .04],  trait: 'playful',  gift: 'ribbon', desc: '현이 하나 끊어진 비올라.' },
-  { id: 'kaine',   name: '카인',    role: '떠돌이 검객',       place: 'tavern', base: 'kael',      tint: [-30, .6, .05],   trait: 'cynical',  gift: 'wine',   desc: '대련만 하고 떠난다. 이름은 남긴다.' },
-  { id: 'poppy',   name: '포피',    role: '이웃 영지 소영애',   place: 'castle', base: 'mira',      tint: [-120, .9, .06],  trait: 'tsundere', gift: 'ribbon', desc: '담장 너머 이웃 영주의 딸. 말이 세다.' },
-  { id: 'stefan',  name: '스테판',  role: '왕도 사절 서기',    place: 'castle', base: 'taron',     tint: [130, .4, -.02],  trait: 'ambitious',gift: 'book',   desc: '왕도의 눈으로 변경을 적어 간다.' },
+  { id: 'ash',     name: '애쉬',    role: '아르카디아 유학 마법사',place: 'tavern', gend: 'm',    trait: 'genius',   gift: 'book',   desc: '마나 이론을 술로 설명한다.' },
+  { id: 'viv',     name: '비브',    role: '연맹 악사',         place: 'tavern', gend: 'f',  trait: 'playful',  gift: 'ribbon', desc: '현이 하나 끊어진 비올라.' },
+  { id: 'kaine',   name: '카인',    role: '떠돌이 검객',       place: 'tavern', gend: 'm',   trait: 'cynical',  gift: 'wine',   desc: '대련만 하고 떠난다. 이름은 남긴다.' },
+  { id: 'poppy',   name: '포피',    role: '이웃 영지 소영애',   place: 'castle', gend: 'f',  trait: 'tsundere', gift: 'ribbon', desc: '담장 너머 이웃 영주의 딸. 말이 세다.' },
+  { id: 'stefan',  name: '스테판',  role: '왕도 사절 서기',    place: 'castle', gend: 'm',  trait: 'ambitious',gift: 'book',   desc: '왕도의 눈으로 변경을 적어 간다.' },
 ];
 
 /* 총 54인: 핵심 13 + 변경 41 */

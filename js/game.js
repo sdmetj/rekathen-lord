@@ -27,6 +27,7 @@ function defaultState(name) {
     children: [], wedding: {}, pregnant: null,
     logs: [], rumors: 0, milestones: [],
     place: 'castle', visited: {}, battledToday: false,
+    tut: { seenP: false, on: true, done: {} },
     gameOver: false, startDay: 1,
   };
 }
@@ -42,6 +43,7 @@ function loadGame() {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || s.v !== 2) return null;
+    if (!s.tut) s.tut = { seenP: true, on: true, done: { visit: true, talk: true, dev: true, sleep: true } };
     /* 과거 버그로 남은 더미 키 정리 */
     delete s.aff.undefined; delete s.trust.undefined; delete s.mood.undefined;
     delete s.rel.undefined; delete s.lastTalk.undefined; delete s.lastGift.undefined;
@@ -193,6 +195,7 @@ function doBuild(id) {
   s.gold -= cost.gold;
   for (const k in cost) if (k !== 'gold') s.items[k] -= cost[k];
   s.bld[id]++;
+  if (typeof tutMark === 'function') tutMark('dev');
   SFX.play('build');
   const b = BUILDINGS.find(x => x.id === id);
   addLog(`${josa(b.name, '이', '가')} ${s.bld[id]}단계로 올라갔다.`);
@@ -239,6 +242,7 @@ function dailyProduceLines() { return []; }
 
 function endDay(sleepAtNight) {
   const s = G.state;
+  if (typeof tutMark === 'function') tutMark('sleep');
   /* 결산 */
   const inc = dailyIncome();
   s.gold += inc.gold;
