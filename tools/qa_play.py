@@ -7,6 +7,7 @@ src = "\n".join(open(f, encoding='utf-8').read() for f in files)
 
 shim = r'''
 var _store = {};
+var setTimeout = function(fn){ };
 var localStorage = { getItem:function(k){return _store[k]===undefined?null:_store[k];},
   setItem:function(k,v){_store[k]=String(v);}, removeItem:function(k){delete _store[k];} };
 var UI = { toast:function(){}, render:function(){}, openEnding:function(){}, openReport:function(){},

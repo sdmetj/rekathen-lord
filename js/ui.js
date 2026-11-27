@@ -265,7 +265,7 @@ const UI = {
     v.innerHTML = `
       <section class="day-head">
         <p class="kicker">명부 · 수집이 아니라 기억</p>
-        <h2>이 겨울에 만난 사람 <span>${metCount}</span><small>/ ${act1.length}</small></h2>
+        <h2>이 겨울에 만난 사람 <span>${metCount}</span><small> / ${act1.length}</small></h2>
         <p class="ambient">명부에는 54자리가 있다. 이 겨울에 문을 두드리는 사람은 열둘.</p>
       </section>
       <div class="roster-grid">${cells}</div>
@@ -542,6 +542,7 @@ const UI = {
         <div class="ph-txt"><p class="kicker">${P.name}</p><h2>${P.desc}</h2></div>
         <button class="x place-x" data-close>✕</button>
       </div>
+      ${key === 'wall' ? `<p class="place-state">${S().bld.wall ? '서쪽 성벽 — 완공. 돌이 바람을 막는다.' : '서쪽 성벽 — 무너진 채. 늑대에게 문이 없다.'}</p>` : ''}
       ${here.length ? `<div class="sect"><h3>이곳의 사람</h3><span>${here.length}</span></div><div class="pchars">${chars}</div>` : ''}
       <div class="sect"><h3>할 수 있는 일</h3><span>이번 ${PHASE_NAME[S().phase]} ${S().slots[S().phase] || 0}번</span></div>
       <div class="acts">${acts}</div>

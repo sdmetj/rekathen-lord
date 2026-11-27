@@ -441,3 +441,5 @@ body.ovl{overflow:hidden}
 .e-inner{width:100%}
 .e-bg{filter:brightness(.5) saturate(.75)}
 .e-veil{background:linear-gradient(180deg,rgba(5,7,13,.72),rgba(5,7,13,.4) 34%,rgba(5,7,13,.82) 76%,#05070d 100%)}
+.toast-root{top:calc(116px + var(--safe-t))}
+.place-state{margin:8px 0 2px;font-size:10.5px;color:var(--gold);background:rgba(232,200,138,.07);border:1px solid rgba(232,200,138,.16);padding:8px 10px;border-radius:10px}
