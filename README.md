@@ -28,7 +28,18 @@
 - **단서 수첩** — 1막 단서 12종 · 추론 6조. 두 단서를 이으면 3막의 질문이 열린다.
 - **1막 목표** — 민심 45 · 성벽 Lv1 · 식량 10일 · 서류와 빈 줄. 15일 밤에 매듭.
 - **세이브** — `arden_save_v3` · 자동 저장 · base64 코드 내보내기/불러오기.
-- **캐시 버스터** — `ASSET_VER = 44`, 모든 `?v=44`.
+- **캐시 버스터** — `ASSET_VER = 45`, 모든 `?v=45`.
+
+## v45 — 코어·주역 작화 리뉴얼
+
+셀레나를 최우선으로 1막 주역·메인 9인의 초상·전신을 `var2` 파스텔 모던 도트 기준으로 다시 뽑았다.
+
+- 새로 뽑음: `serena` `kael` `mira` `claire` `ellen` `mill` `greta` `seraphine` `dorun` (초상+전신 18장).
+  초상과 전신이 같은 'look' 문장을 공유해 머리색·눈색·복장이 어긋나지 않는다(`tools/art_specs_core.py`).
+- 그대로 둠(이미 기준에 맞음): `lana` `beloa` `rebe` `tilly`.
+- `ellen`은 백금발·적안·왼 외뿔, `mill`은 초록 단발·오른뿔·노란 눈, `lana`는 적발·왼뿔+잘린 오른뿔로 설정을 지켰다.
+- 공통 파이프라인: `tools/pixelize.py` — 실루엣 despill·마젠타 제거·1px 외곽선·파스텔 셀 채색.
+  흰 머리·검은 옷처럼 극단적인 색은 `tools/gencore.py`의 인물별 보정으로 뭉개짐을 막았다.
 
 ## v44 — 1막 문구 전면 리라이팅
 
@@ -59,6 +70,9 @@ js/main.js          부트
 tools/qa_data.py    데이터 정합성·금지어 검사
 tools/qa_play.py    15일 자동 플레이 시뮬레이션
 tools/qa_voice.py   대사 목소리·리듬 검수 (S·V·D·C·L 목표 수치)
+tools/art_specs_core.py  코어·주역 작화 설계도 (초상/전신 공통 look)
+tools/gencore.py    코어·주역 작화 생성·도트 후처리
+tools/pixelize.py   마젠타 배경 → 투명 도트 후처리 파이프라인
 ```
 
 ## QA
