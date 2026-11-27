@@ -62,7 +62,9 @@ index.html          화면 셸
 css/style.css       모던 인디 다크 UI
 js/data.js          세계 · 건물 · 사건 · 아이템 · 계절
 js/chars.js         54인 인물 명부 (핵심 13 + 변경 41)
-js/talk.js          프리토크 파서 · 태도 액션 · 하트 이벤트 · 질투
+js/talk.js          대화 게인 · 하트 이벤트 · 질투
+js/voice.js         인물별 대사 뱅크 (54인 × 안부·일·개인사·마음속)
+js/story.js         오프닝 프롤로그 4장 · 첫날 가이드
 js/audio.js         Web Audio 효과음
 js/game.js          상태 · 하루 루프 · 시설 · 상회 · 전투 · 가족
 js/ui.js            렌더 · 지도 SVG · 채팅 · 시트

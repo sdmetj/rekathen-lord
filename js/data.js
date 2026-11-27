@@ -145,7 +145,7 @@ const TRAITS = {
     },
   },
   noble: {
-    name: '도도한 귀족', tone: 'noble', color: '#e0b46a',
+    name: '도도함', tone: 'noble', color: '#e0b46a',
     likes: { praise: 1.1, flirt: 1.2, tease: 0.7, comfort: 0.6, secret: 1.2 },
     gift: 'ribbon',
     talk: {
@@ -164,7 +164,7 @@ const TRAITS = {
     },
   },
   trickster: {
-    name: '능글맞은 사기꾼', tone: 'banmal', color: '#8ce8c9',
+    name: '능글맞음', tone: 'banmal', color: '#8ce8c9',
     likes: { praise: 1.0, flirt: 1.3, tease: 1.4, comfort: 0.7, money: 1.4 },
     gift: 'wine',
     talk: {
@@ -183,7 +183,7 @@ const TRAITS = {
     },
   },
   devout: {
-    name: '순수한 신앙인', tone: 'jonse', color: '#8fc7ff',
+    name: '독실함', tone: 'jonse', color: '#8fc7ff',
     likes: { praise: 0.9, flirt: 0.7, tease: 0.6, comfort: 1.2, faith: 1.6 },
     gift: 'flower',
     talk: {
@@ -240,7 +240,7 @@ const TRAITS = {
     },
   },
   genius: {
-    name: '나른한 천재', tone: 'banmal', color: '#b8e08a',
+    name: '천재', tone: 'banmal', color: '#b8e08a',
     likes: { praise: 0.9, flirt: 1.0, tease: 1.1, comfort: 0.8, work: 1.5 },
     gift: 'book',
     talk: {
@@ -278,7 +278,7 @@ const TRAITS = {
     },
   },
   timid: {
-    name: '소심한 약초사', tone: 'jonse', color: '#9fd6b4',
+    name: '소심함', tone: 'jonse', color: '#9fd6b4',
     likes: { praise: 1.3, flirt: 0.6, tease: 0.4, comfort: 1.4, work: 1.0 },
     gift: 'candy',
     talk: {
@@ -297,7 +297,7 @@ const TRAITS = {
     },
   },
   valiant: {
-    name: '호탕한 여장부', tone: 'banmal', color: '#ffb37a',
+    name: '호탕함', tone: 'banmal', color: '#ffb37a',
     likes: { praise: 1.1, flirt: 1.1, tease: 1.3, comfort: 0.8, drink: 1.6 },
     gift: 'wine',
     talk: {
@@ -354,7 +354,7 @@ const TRAITS = {
     },
   },
   loyal: {
-    name: '충직한 기사', tone: 'jonse', color: '#a8c4ff',
+    name: '충직함', tone: 'jonse', color: '#a8c4ff',
     likes: { praise: 1.1, flirt: 0.7, tease: 0.6, comfort: 1.1, battle: 1.4 },
     gift: 'ribbon',
     talk: {
@@ -373,7 +373,7 @@ const TRAITS = {
     },
   },
   cynical: {
-    name: '냉소적 정보상', tone: 'banmal', color: '#9aa7c9',
+    name: '냉소적', tone: 'banmal', color: '#9aa7c9',
     likes: { praise: 0.6, flirt: 1.0, tease: 1.1, comfort: 0.6, secret: 1.6, money: 1.2 },
     gift: 'feather',
     talk: {

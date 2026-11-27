@@ -125,9 +125,9 @@ SPECS = {
         'a glass jar hugged to her chest, soot on her sleeve'),
     'sable': ('f',
         'a pale perfumer of twenty-nine with long straight black hair that shines violet, smoky grey eyes, '
-        'a dark plum high-necked gown with long sleeves and a silver clasp',
-        'a calm unreadable look, one slim glass vial held up beside her cheek',
-        'both hands hidden in her long wide sleeves, a row of small glass vials on the table behind her'),
+        'a dark plum high-necked gown with long sleeves and a silver clasp, her long black hair falling loose over both shoulders',
+        'a calm unreadable look, face clearly visible, no hood, one slim glass vial held up beside her cheek',
+        'standing beside a small table of glass vials, face and hair clearly visible, no hood, hands folded at her waist'),
     'otto': ('m',
         'a glassblower of thirty-three with red-brown hair tied back, amber eyes, thick leather smock with burn marks, '
         'brass goggles around his neck',
@@ -197,11 +197,12 @@ SPECS = {
         'an earnest nervous look',
         'a spear in one hand, the other bare and red from the cold'),
     'echo': ('f',
-        'a young woman of twenty-six, slender and athletic, with short silver-grey hair and a thin braid at one temple, '
-        'dark eyes, freckles, a single small dark horn on the left side of her head, '
-        'a patched riding coat belted at the waist over a linen shirt',
+        'a young woman of twenty-six with a soft feminine face, long eyelashes, full lips and a slim waist, '
+        'shoulder-length silver-grey hair with a small braid at one temple, dark eyes, freckles, '
+        'a single small dark horn on the left side of her head, '
+        'a patched riding coat cinched at the waist over a fitted linen shirt and breeches',
         'a guarded sidelong look, lips pressed thin',
-        'a dog whistle on a cord in one hand, muddy boots'),
+        'a dog whistle on a cord in one hand, one hand on her hip, muddy boots'),
 
     # ── 떠돌이 · 손님 ───────────────────────────────────────────
     'ash': ('m',

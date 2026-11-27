@@ -11,7 +11,7 @@ const tabEl = () => document.getElementById('tabbar');
    54인 전원이 자기 id의 고유 작화를 쓴다. 공유 base 폴백은 폐기했다.
    assets/{id}.png = 전신, assets/{id}_portrait.png = 초상. */
 /* 작화를 교체할 때 브라우저가 예전 그림을 캐시해 두지 않도록 버전을 붙인다. */
-const ASSET_VER = '30';
+const ASSET_VER = '31';
 const av = p => `${p}?v=${ASSET_VER}`;
 
 const IMG_FALLBACK = `onerror="this.onerror=null;this.src='assets/lord.png?v=${ASSET_VER}'"`;
@@ -218,7 +218,6 @@ function renderMap() {
     b.addEventListener('click', () => { SFX.play('open'); G.screen = { view: 'place', place: b.dataset.place }; render(); }));
   const tb = $('#tutBanner');
   if (tb) tb.addEventListener('click', () => { SFX.play('open'); openGuide(false); });
-  bindCommon();
 }
 
 /* ── 장소 뷰 ──────────────────────────────────────────────── */
@@ -357,7 +356,6 @@ function renderPlace() {
     SFX.play('tap');
     openChat(b.dataset.person);
   }));
-  bindCommon();
 }
 
 /* ── 채팅 (바베챗 스타일) ──────────────────────────────────── */
@@ -517,7 +515,7 @@ function chatChoose(kind) {
   chatBusy(680).then(() => {
     const repeat = s.flags['_topic_' + kind] === s.day;  /* 같은 화제를 하루에 되풀이하면 값이 줄어든다 */
     s.flags['_topic_' + kind] = s.day;
-    let gain = talkGain(c, intent, s) + (TOPIC_BONUS[kind] || 0);
+    let gain = Math.round((talkGain(c, intent, s) + (TOPIC_BONUS[kind] || 0)) * 2);
     let tg = trustGain(c, intent, s);
     if (repeat) { gain = Math.max(0, Math.round(gain * 0.4)); tg = 0; }
     addAff(c.id, gain); addTrust(c.id, tg);
@@ -1113,7 +1111,6 @@ function renderRoster() {
     </div>
     <div style="height:10px"></div>`;
   viewEl().querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => openChat(b.dataset.c)));
-  bindCommon();
 }
 
 function renderJournal() {
@@ -1152,7 +1149,6 @@ function renderJournal() {
     SFX.play('level');
     saveGame(); render();
   }));
-  bindCommon();
 }
 
 /* ── 타이틀 ───────────────────────────────────────────────── */
@@ -1182,7 +1178,7 @@ function showTitle() {
             <button class="btn ${saved ? 'ghost' : 'primary'} wide" id="startBtn">✦ 새로 시작한다</button>
           </div>
         </div>
-        <div class="title-foot">54명의 인물 · 사계절 샌드박스 · 로맨스/결혼/자녀/가신 · 프리토크 대화</div>
+        <div class="title-foot">54명의 인물 · 사계절 샌드박스 · 로맨스/결혼/자녀/가신 · 선택지 대화</div>
       </div>
     </div>`;
   const start = () => {

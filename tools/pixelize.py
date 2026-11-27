@@ -120,16 +120,18 @@ def neutralise(img, mask, iters=60):
 def quantise(rgba, colors=32, method=Image.Quantize.MEDIANCUT):
     arr = np.array(rgba)
     mask = arr[:, :, 3] > 0
-    pixels = arr[mask][:, :3]
+    pixels = arr[mask][:, :3].astype(np.int32)
     if len(pixels) == 0:
         return rgba
-    strip = Image.fromarray(pixels.reshape(1, -1, 3), "RGB")
+    # 남은 마젠타 번짐이 팔레트 항목이 되면 축소 경계가 형광색으로 뜬다. 표본에서만 뺀다.
+    clean = (np.minimum(pixels[:, 0], pixels[:, 2]) - pixels[:, 1]) <= 60
+    sample = pixels[clean] if clean.sum() > colors * 8 else pixels
+    strip = Image.fromarray(sample.astype(np.uint8).reshape(1, -1, 3), "RGB")
     q = strip.quantize(colors=colors, method=method, dither=Image.Dither.NONE)
     pal = np.array(q.getpalette()[:colors * 3], dtype=np.int32).reshape(-1, 3)
-    p = pixels.astype(np.int32)
-    out_rgb = np.empty_like(p, dtype=np.uint8)
-    for i in range(0, len(p), 30000):
-        chunk = p[i:i + 30000]
+    out_rgb = np.empty_like(pixels, dtype=np.uint8)
+    for i in range(0, len(pixels), 30000):
+        chunk = pixels[i:i + 30000]
         d = ((chunk[:, None, :] - pal[None, :, :]) ** 2).sum(axis=2)
         out_rgb[i:i + 30000] = pal[d.argmin(axis=1)].astype(np.uint8)
     res = np.zeros_like(arr)
@@ -175,30 +177,49 @@ def clean_specks(img, iters=2):
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
-def despill(rgb, alpha, rounds=8, tol=18):
-    """실루엣 경계에 남은 마젠타 번짐을 '불투명한' 이웃 색으로만 덮는다.
-    투명 영역은 마젠타라서 이웃으로 쓰면 오히려 번진다."""
-    out = rgb.astype(np.float32).copy()
-    opaque = alpha
+def despill(rgb, alpha, tol=18, rounds=10):
+    """실루엣 가장자리에 남은 마젠타 번짐만 걷어낸다.
+
+    안쪽(보라 머리·자주 옷 같은 진짜 색)은 건드리지 않는다.
+    바깥(투명 영역 + 이미지 바깥)과 3px 안쪽까지를 '가장자리 띠'로 보고,
+    그 안에서만 (min(R,B) - G) 가 큰 화소를 가까운 정상 색으로 덮는다.
+    """
+    DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1))
+    h, w, _ = rgb.shape
+    pad = 4
+    A = np.zeros((h + 2 * pad, w + 2 * pad), bool)
+    A[pad:pad + h, pad:pad + w] = alpha
+    R = np.zeros((h + 2 * pad, w + 2 * pad, 3), np.float32)
+    R[pad:pad + h, pad:pad + w] = rgb
+    bg = ~A
+    grown = bg.copy()
+    band = A & bg
+    for _ in range(3):
+        nb = np.zeros_like(grown)
+        for dy, dx in DIRS:
+            nb |= np.roll(np.roll(grown, dy, axis=0), dx, axis=1)
+        grown = nb | bg
+        band |= A & grown
+    out = R.copy()
+    bad = band & ((np.minimum(out[:, :, 0], out[:, :, 2]) - out[:, :, 1]) > tol)
     for _ in range(rounds):
-        r, g, b = out[:, :, 0], out[:, :, 1], out[:, :, 2]
-        bad = opaque & ((np.minimum(r, b) - g) > tol)
         if not bad.any():
             break
-        good = opaque & ~bad
+        good = A & ~bad
         acc = np.zeros_like(out)
-        cnt = np.zeros(out.shape[:2], dtype=np.float32)
-        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+        cnt = np.zeros(A.shape, np.float32)
+        for dy, dx in DIRS:
             nbr = np.roll(np.roll(out, dy, axis=0), dx, axis=1)
             ok = np.roll(np.roll(good, dy, axis=0), dx, axis=1)
             acc += nbr * ok[..., None]
             cnt += ok
         upd = bad & (cnt > 0)
         out[upd] = acc[upd] / cnt[upd][:, None]
-    return np.clip(out, 0, 255).astype(np.uint8)
+        bad &= ~upd
+    return np.clip(out[pad:pad + h, pad:pad + w], 0, 255).astype(np.uint8)
 
 
-def fill_outside(rgb, alpha, iters=6):
+def fill_outside(rgb, alpha, iters=18):
     """투명 영역을 가장 가까운 불투명 색으로 채운다.
     축소(LANCZOS)할 때 마젠타가 실루엣 안으로 섞여 들어오는 것을 막는다."""
     out = rgb.copy()
@@ -245,6 +266,10 @@ def cutout(src):
     opaque &= ~(magenta > MAGENTA_TOL)
     interior = ~border_flood(~opaque) & ~opaque
     opaque |= interior
+    # 마스크가 남겨 둔 진짜 마젠타(배경)는 색으로 마지막에 한 번 더 걷어낸다.
+    # 캐릭터 색 중에 R·B가 함께 200을 넘고 G가 60 미만인 색은 없다.
+    pure = (rgb16[:, :, 0] > 200) & (rgb16[:, :, 2] > 200) & (rgb16[:, :, 1] < 60)
+    opaque &= ~pure
 
     base = neutralise(arr, (magenta >= 25) & opaque)
     blur = np.array(Image.fromarray(base).filter(ImageFilter.GaussianBlur(5)))

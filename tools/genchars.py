@@ -49,9 +49,9 @@ def pixelize(cid, kind):
     if kind == 'face':
         pix.process_sprite(src, OUT / f'{cid}_portrait.png', target=(240, 240), outline=False,
                            align='center', scale=3, colors=48,
-                           color=1.10, contrast=1.04, bright=1.05)
+                           color=1.18, contrast=1.05, bright=1.06)
         return OUT / f'{cid}_portrait.png'
-    pix.process_sprite(src, OUT / f'{cid}.png')
+    pix.process_sprite(src, OUT / f'{cid}.png', color=1.20, contrast=1.06, bright=1.02)
     return OUT / f'{cid}.png'
 
 
